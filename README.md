@@ -1,6 +1,8 @@
 # SurakshitPath (सुरक्षित पथ) 🛡️🚶‍♀️✨
 > **Safer Routes • Smarter Choices • Citizen-Powered Civic Safety**
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FDhruvplaz-web%2FSurakshitPath)
+
 SurakshitPath is an advanced, AI & ML-powered nocturnal navigation and urban safety ecosystem tailored for Indian cities, starting with **Pune**. Built for commuters, night-shift workers, students, and lone travelers, SurakshitPath dynamically balances transit efficiency with pedestrian safety through algorithmic route evaluation, real-time civic hazard integration, and multi-role emergency response.
 
 ---
