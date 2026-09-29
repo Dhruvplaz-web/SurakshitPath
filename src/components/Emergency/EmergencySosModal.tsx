@@ -12,6 +12,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { sirenService } from '../../services/sirenService';
+import { strobeService } from '../../services/strobeService';
 import { PUNE_CATEGORIZED_POIS, PunePoi } from '../../data/punePois';
 import {
   X,
@@ -23,7 +24,10 @@ import {
   Radio,
   Send,
   CheckCircle2,
-  MapPin
+  MapPin,
+  Flashlight,
+  Zap,
+  Maximize2
 } from 'lucide-react';
 
 interface Props {
@@ -43,39 +47,96 @@ export const EmergencySosModal: React.FC<Props> = ({
 }) => {
   const { user } = useAuth();
   const [isSirenActive, setIsSirenActive] = useState(false);
+  const [isStrobeActive, setIsStrobeActive] = useState(false);
+  const [isTorchSupported, setIsTorchSupported] = useState(false);
+  const [strobePulseState, setStrobePulseState] = useState(false);
+  const [isFullscreenStrobe, setIsFullscreenStrobe] = useState(false);
   const [sosDispatched, setSosDispatched] = useState(false);
   const [duressPin, setDuressPin] = useState('');
   const [duressState, setDuressState] = useState<'idle' | 'triggered'>('idle');
 
-  // Stop siren when modal closes
+    // Subscribe to strobe 8Hz pulses for real-time visual feedback
   useEffect(() => {
-    if (!isOpen && isSirenActive) {
-      sirenService.stopSiren();
-      setIsSirenActive(false);
+    const unsubscribe = strobeService.subscribe((isHigh, isTorch) => {
+      setStrobePulseState(isHigh);
+      setIsTorchSupported(isTorch);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Stop siren and hardware strobe when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      if (isSirenActive) {
+        sirenService.stopSiren();
+        setIsSirenActive(false);
+      }
+      if (isStrobeActive) {
+        strobeService.stopStrobe();
+        setIsStrobeActive(false);
+      }
+      setIsFullscreenStrobe(false);
     }
-  }, [isOpen, isSirenActive]);
+  }, [isOpen]);
 
   // Handle ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
         if (isSirenActive) sirenService.stopSiren();
+        if (isStrobeActive) strobeService.stopStrobe();
+        setIsFullscreenStrobe(false);
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isSirenActive, onClose]);
+  }, [isOpen, isSirenActive, isStrobeActive, onClose]);
 
   if (!isOpen) return null;
 
-  const toggleSiren = () => {
+    const toggleSiren = () => {
     if (isSirenActive) {
       sirenService.stopSiren();
       setIsSirenActive(false);
     } else {
       sirenService.startSiren();
       setIsSirenActive(true);
+    }
+  };
+
+  const toggleStrobe = async () => {
+    if (isStrobeActive) {
+      strobeService.stopStrobe();
+      setIsStrobeActive(false);
+      setIsFullscreenStrobe(false);
+    } else {
+      setIsStrobeActive(true);
+      const torchWorked = await strobeService.startStrobe();
+      setIsTorchSupported(torchWorked);
+    }
+  };
+
+  const toggleAllDeterrents = async () => {
+    const shouldActivate = !isSirenActive || !isStrobeActive;
+    if (shouldActivate) {
+      if (!isSirenActive) {
+        sirenService.startSiren();
+        setIsSirenActive(true);
+      }
+      if (!isStrobeActive) {
+        setIsStrobeActive(true);
+        const torchWorked = await strobeService.startStrobe();
+        setIsTorchSupported(torchWorked);
+      }
+    } else {
+      sirenService.stopSiren();
+      setIsSirenActive(false);
+      strobeService.stopStrobe();
+      setIsStrobeActive(false);
+      setIsFullscreenStrobe(false);
     }
   };
 
@@ -129,6 +190,7 @@ export const EmergencySosModal: React.FC<Props> = ({
   const guardians = user?.trustedGuardians || [];
 
   return (
+    <>
     <div
       role="dialog"
       aria-modal="true"
@@ -364,38 +426,154 @@ export const EmergencySosModal: React.FC<Props> = ({
             </a>
           </div>
 
-          {/* Siren Acoustic Deterrent Button */}
-          <button
-            type="button"
-            onClick={toggleSiren}
+                    {/* Hardware Strobe Beacon & Acoustic Siren Deterrent Panel */}
+          <div
             style={{
-              padding: '12px 16px',
-              backgroundColor: isSirenActive ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-              border: isSirenActive ? '2px solid var(--accent-amber, #f59e0b)' : '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '10px',
-              color: isSirenActive ? 'var(--accent-amber, #f59e0b)' : 'var(--text-primary)',
-              fontSize: '13px',
-              fontWeight: 800,
-              cursor: 'pointer',
+              backgroundColor: (isSirenActive || isStrobeActive) ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+              border: (isSirenActive || isStrobeActive) ? '1.5px solid var(--danger-crimson)' : '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '14px',
+              padding: '12px 14px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              boxShadow: isSirenActive ? '0 0 16px rgba(245, 158, 11, 0.4)' : 'none'
+              flexDirection: 'column',
+              gap: '10px',
+              transition: 'all 0.2s ease',
+              boxShadow: (isSirenActive || isStrobeActive) ? '0 0 24px rgba(239, 68, 68, 0.25)' : 'none'
             }}
           >
-            {isSirenActive ? (
-              <>
-                <VolumeX size={16} />
-                <span>Stop Siren 🔊</span>
-              </>
-            ) : (
-              <>
-                <Volume2 size={16} />
-                <span>Start Loud Siren</span>
-              </>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                ACOUSTIC & OPTICAL DETERRENT
+              </div>
+              {(isSirenActive || isStrobeActive) && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    color: '#ffffff',
+                    backgroundColor: strobePulseState ? 'var(--danger-crimson)' : '#f59e0b',
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    letterSpacing: '0.04em',
+                    transition: 'background-color 0.1s ease'
+                  }}
+                >
+                  ACTIVE 8Hz
+                </span>
+              )}
+            </div>
+
+            {/* Master Toggle: Maximum Deterrent (Both Siren & Strobe) */}
+            <button
+              type="button"
+              onClick={toggleAllDeterrents}
+              style={{
+                padding: '12px 16px',
+                backgroundColor: (isSirenActive && isStrobeActive) ? 'var(--danger-crimson)' : 'rgba(239, 68, 68, 0.18)',
+                border: (isSirenActive && isStrobeActive) ? '2px solid #ffffff' : '1.5px solid var(--danger-crimson)',
+                borderRadius: '10px',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 900,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: (isSirenActive && isStrobeActive) ? '0 0 20px rgba(239, 68, 68, 0.6)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Zap size={16} />
+              <span>{(isSirenActive && isStrobeActive) ? 'Stop Maximum Deterrent 🛑' : '🚨 Max Deterrent (Siren + Strobe Beacon)'}</span>
+            </button>
+
+            {/* Two Granular Controls: Acoustic Siren & Strobe Beacon */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+              {/* Siren Only Button */}
+              <button
+                type="button"
+                onClick={toggleSiren}
+                style={{
+                  padding: '9px 12px',
+                  backgroundColor: isSirenActive ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                  border: isSirenActive ? '1.5px solid var(--accent-amber)' : '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: isSirenActive ? 'var(--accent-amber)' : 'var(--text-primary)',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isSirenActive ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                <span>{isSirenActive ? 'Stop Siren' : '🔊 Acoustic Siren'}</span>
+              </button>
+
+              {/* Hardware Strobe Only Button */}
+              <button
+                type="button"
+                onClick={toggleStrobe}
+                style={{
+                  padding: '9px 12px',
+                  backgroundColor: isStrobeActive ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                  border: isStrobeActive ? '1.5px solid var(--danger-crimson)' : '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: isStrobeActive ? 'var(--danger-crimson)' : 'var(--text-primary)',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Flashlight size={14} />
+                <span>{isStrobeActive ? 'Stop Strobe' : '🔦 Strobe Beacon'}</span>
+              </button>
+            </div>
+
+            {/* Strobe Status & Fullscreen Trigger (when Strobe is active) */}
+            {isStrobeActive && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 10px',
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  borderRadius: '6px',
+                  fontSize: '10px'
+                }}
+              >
+                <span style={{ color: isTorchSupported ? 'var(--safe-emerald)' : 'var(--accent-amber)', fontWeight: 700 }}>
+                  {isTorchSupported ? '🔦 Physical Camera LED Strobe Active' : '🖥️ Screen Optical Strobe Active'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreenStrobe(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    textDecoration: 'underline'
+                  }}
+                >
+                  <Maximize2 size={11} />
+                  <span>Fullscreen Beacon</span>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
 
           {/* Live Location Telematics Card */}
           <div
@@ -701,6 +879,53 @@ export const EmergencySosModal: React.FC<Props> = ({
         </div>
       </div>
     </div>
+
+      {/* Fullscreen Optical Strobe Hazard Overlay */}
+      {isFullscreenStrobe && (
+        <div
+          onClick={() => setIsFullscreenStrobe(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Stop Fullscreen Strobe"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            backgroundColor: strobePulseState ? '#ffffff' : '#ef4444',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            padding: '24px',
+            textAlign: 'center',
+            transition: 'background-color 0.05s ease'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.88)',
+              border: '2px solid #ffffff',
+              color: '#ffffff',
+              padding: '18px 28px',
+              borderRadius: '16px',
+              maxWidth: '380px',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.8)'
+            }}
+          >
+            <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '0.04em' }}>
+              🚨 EMERGENCY STROBE BEACON
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--accent-amber)', marginTop: '8px', fontWeight: 800 }}>
+              {isTorchSupported ? '🔦 Hardware Camera Torch & Screen 8Hz Pulsing' : '🖥️ High-Contrast Display 8Hz Optical Flare'}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '14px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Tap anywhere to return to SOS Cockpit
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
