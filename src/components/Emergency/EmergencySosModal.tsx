@@ -255,7 +255,7 @@ export const EmergencySosModal: React.FC<Props> = ({
         {/* Scrollable Body */}
         <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Primary Guardian Direct Call & WhatsApp Dispatch (Mobile & Laptop Ready) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             <a
               href="tel:+919665184535"
               style={{
@@ -304,9 +304,9 @@ export const EmergencySosModal: React.FC<Props> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                fontWeight: 800,
+                fontWeight: 900,
                 fontSize: '12px',
-                boxShadow: '0 4px 14px rgba(37, 211, 102, 0.2)',
+                boxShadow: '0 4px 14px rgba(37, 211, 102, 0.25)',
                 transition: 'transform 0.1s ease',
                 cursor: 'pointer'
               }}
@@ -318,7 +318,7 @@ export const EmergencySosModal: React.FC<Props> = ({
           </div>
 
           {/* Priority Dialing Actions Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             <a
               href="tel:112"
               style={{
@@ -569,7 +569,7 @@ export const EmergencySosModal: React.FC<Props> = ({
               {sosDispatched ? (
                 <>
                   <CheckCircle2 size={14} />
-                  <span>Alert Dispatched ✅</span>
+                  <span>Alert Dispatched ✓</span>
                 </>
               ) : (
                 <>

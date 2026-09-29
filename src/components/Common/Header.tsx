@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Moon, Sun, Volume2, VolumeX, Share2, AlertTriangle, User, LogOut, ChevronDown, Shield, HeartHandshake, Building, Users, RefreshCw } from 'lucide-react';
+import { Moon, Sun, Volume2, VolumeX, Share2, AlertTriangle, User, LogOut, ChevronDown, Shield, HeartHandshake, Building, Users, RefreshCw, Menu, X, CloudRain, SunMedium, CloudFog } from 'lucide-react';
 import { UserRole, AppLanguage, SafeHaven } from '../../types/routing';
 import { getTranslation } from '../../services/localizationService';
 import { LanguageDropdown } from './LanguageDropdown';
 import { SheltersDropdown, ShelterCategoryOption } from './SheltersDropdown';
 import { NecessityDropdown } from './NecessityDropdown';
-import { NocturnalWeatherCard, WeatherMode, WeatherRiskProfile } from '../Commuter/NocturnalWeatherCard';
+import { NocturnalWeatherCard, WeatherMode, WeatherRiskProfile, WEATHER_PROFILES } from '../Commuter/NocturnalWeatherCard';
 import { PuneLocation } from '../../services/geocodingService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -21,6 +21,7 @@ interface Props {
   onOpenSos?: () => void;
   onOpenCabShield?: () => void;
   onOpenShelters?: (category?: ShelterCategoryOption) => void;
+  onOpenFakeCall?: () => void;
   onLockSafeHaven?: (haven: SafeHaven) => void;
   currentCoordinates?: [number, number];
   userCoordinates?: [number, number];
@@ -40,9 +41,10 @@ export const Header: React.FC<Props> = ({
   onSelectLanguage,
   onOpenReportModal,
   onOpenShareModal,
-  onOpenSos: _onOpenSos,
-  onOpenCabShield: _onOpenCabShield,
+  onOpenSos,
+  onOpenCabShield,
   onOpenShelters,
+  onOpenFakeCall,
   onLockSafeHaven,
   currentCoordinates,
   userCoordinates,
@@ -55,18 +57,28 @@ export const Header: React.FC<Props> = ({
   const t = getTranslation(currentLanguage);
   const { user, openAuthModal, signOut, openGuardianModal } = useAuth();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const activeRole = user?.role || currentRole;
 
   useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = (e.target as Node) || (e instanceof TouchEvent && e.touches && e.touches[0] ? (e.touches[0].target as Node) : null);
+      if (profileMenuRef.current && target && !profileMenuRef.current.contains(target)) {
         setIsProfileMenuOpen(false);
+      }
+      if (mobileMenuRef.current && target && !mobileMenuRef.current.contains(target)) {
+        setIsMobileMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
   }, []);
 
   return (
@@ -122,7 +134,7 @@ export const Header: React.FC<Props> = ({
       </div>
 
       {/* Right Actions Cluster */}
-      <div className="header-actions">
+      <div className="header-actions desktop-header-actions">
         {/* Safe Shelters Categorised Dropdown (Hospitals, Temples, Police, Helplines, Supermarts) */}
         {onOpenShelters && (
           <SheltersDropdown
@@ -571,6 +583,307 @@ export const Header: React.FC<Props> = ({
             <span className="btn-label">Login / Select Role</span>
           </button>
         )}
+      </div>
+      {/* Mobile Actions Cluster (Strictly rendered on mobile screens <= 768px) */}
+      <div className="mobile-header-cluster">
+        {/* High-Contrast 1-Tap SOS Emergency Trigger */}
+        {onOpenSos && (
+          <button
+            type="button"
+            onClick={onOpenSos}
+            className="mobile-header-sos-btn"
+            title="Instant 1-Tap Emergency SOS (112, Police, Siren, Fake Call)"
+            aria-label="Instant Emergency SOS"
+          >
+            <span className="mobile-sos-ping" />
+            <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>🚨</span>
+              <span>SOS</span>
+            </span>
+          </button>
+        )}
+
+        {/* Mobile Services & Menu Trigger Button */}
+        <div ref={mobileMenuRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            className={`mobile-menu-trigger-btn ${isMobileMenuOpen ? 'active' : ''}`}
+            aria-label="Services & Menu"
+            title="Open Services, Shelters, Necessities & Account"
+          >
+            {isMobileMenuOpen ? <X size={17} /> : <Menu size={17} />}
+            <span>Menu</span>
+          </button>
+
+          {isMobileMenuOpen && (
+            <div className="mobile-dropdown-menu">
+              {/* 1. Account & Operational Role */}
+              <div className="mobile-dropdown-header">
+                {user ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                      <div
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          backgroundColor:
+                            activeRole === 'admin'
+                              ? '#2563eb'
+                              : activeRole === 'volunteer'
+                                ? '#db2777'
+                                : 'var(--safe-emerald)',
+                          color: '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          flexShrink: 0
+                        }}
+                      >
+                        {user.displayName?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {user.displayName}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          {activeRole === 'admin' ? 'PMC Civic Admin' : activeRole === 'volunteer' ? 'Suraksha Sahayak' : 'Commuter'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        openAuthModal();
+                      }}
+                      className="btn-civic"
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                        color: 'var(--accent-amber)',
+                        border: '1px solid var(--accent-amber)',
+                        borderRadius: '6px',
+                        flexShrink: 0
+                      }}
+                    >
+                      Switch Role
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      openAuthModal();
+                    }}
+                    className="btn-civic"
+                    style={{
+                      width: '100%',
+                      justifyContent: 'center',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid var(--accent-amber)',
+                      color: 'var(--accent-amber)',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <User size={14} />
+                    <span>Login / Select Role (Admin / Sahayak)</span>
+                  </button>
+                )}
+              </div>
+
+              {/* 2. Core Safety & Emergency Tools */}
+              <div className="mobile-dropdown-section">
+                <div className="mobile-dropdown-section-title">Safety & Emergency Services</div>
+
+                {onOpenShelters && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenShelters();
+                    }}
+                    className="mobile-dropdown-item"
+                  >
+                    <div className="mobile-item-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: 'var(--safe-emerald)' }}>
+                      🏥
+                    </div>
+                    <div className="mobile-item-info">
+                      <div className="mobile-item-title">Safe Shelters & Havens</div>
+                      <div className="mobile-item-desc">24/7 Police, Hospitals, Illuminated Fuel Stations</div>
+                    </div>
+                  </button>
+                )}
+
+                <div className="mobile-dropdown-item-interactive">
+                  <NecessityDropdown
+                    userCoordinates={userCoordinates || currentCoordinates || [18.5204, 73.8567]}
+                    onSelectDestination={(loc) => {
+                      setIsMobileMenuOpen(false);
+                      if (onSelectDestination) onSelectDestination(loc);
+                    }}
+                    currentLanguage={currentLanguage}
+                  />
+                </div>
+
+                {onOpenCabShield && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenCabShield();
+                    }}
+                    className="mobile-dropdown-item"
+                  >
+                    <div className="mobile-item-icon" style={{ backgroundColor: 'rgba(234, 88, 12, 0.15)', color: '#ea580c' }}>
+                      🛡️
+                    </div>
+                    <div className="mobile-item-info">
+                      <div className="mobile-item-title">Cab Ride Shield</div>
+                      <div className="mobile-item-desc">Automated Route Deviation & Telemetry Watchdog</div>
+                    </div>
+                  </button>
+                )}
+
+                {onOpenFakeCall && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenFakeCall();
+                    }}
+                    className="mobile-dropdown-item"
+                  >
+                    <div className="mobile-item-icon" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
+                      📞
+                    </div>
+                    <div className="mobile-item-info">
+                      <div className="mobile-item-title">Fake Call Decoy</div>
+                      <div className="mobile-item-desc">Simulated Incoming Ring to Deter Approaching Strangers</div>
+                    </div>
+                  </button>
+                )}
+
+                {onOpenReportModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenReportModal();
+                    }}
+                    className="mobile-dropdown-item"
+                  >
+                    <div className="mobile-item-icon" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-crimson)' }}>
+                      ⚠️
+                    </div>
+                    <div className="mobile-item-info">
+                      <div className="mobile-item-title">{t.reportHazard}</div>
+                      <div className="mobile-item-desc">Flag Dark Spot, Broken Light, or Road Obstacle</div>
+                    </div>
+                  </button>
+                )}
+
+                {onOpenShareModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenShareModal();
+                    }}
+                    className="mobile-dropdown-item"
+                  >
+                    <div className="mobile-item-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: 'var(--accent-amber)' }}>
+                      📲
+                    </div>
+                    <div className="mobile-item-info">
+                      <div className="mobile-item-title">{t.sharePass}</div>
+                      <div className="mobile-item-desc">Live Tracking Link for Trusted Family & Guardians</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              {/* 3. Nocturnal Weather Risk Simulation */}
+              <div className="mobile-dropdown-section">
+                <div className="mobile-dropdown-section-title">Night Weather & Road Risk</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onWeatherModeChange) onWeatherModeChange('clear', WEATHER_PROFILES.clear);
+                    }}
+                    className={`mobile-weather-pill ${activeWeatherMode === 'clear' ? 'active' : ''}`}
+                  >
+                    <SunMedium size={13} />
+                    <span>Clear</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onWeatherModeChange) onWeatherModeChange('rain', WEATHER_PROFILES.rain);
+                    }}
+                    className={`mobile-weather-pill ${activeWeatherMode === 'rain' ? 'active' : ''}`}
+                  >
+                    <CloudRain size={13} />
+                    <span>Rainy</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onWeatherModeChange) onWeatherModeChange('fog', WEATHER_PROFILES.fog);
+                    }}
+                    className={`mobile-weather-pill ${activeWeatherMode === 'fog' ? 'active' : ''}`}
+                  >
+                    <CloudFog size={13} />
+                    <span>Foggy</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4. Quick Preferences: Language, Theme, Voice */}
+              <div className="mobile-dropdown-section" style={{ borderBottom: 'none', paddingBottom: '4px' }}>
+                <div className="mobile-dropdown-section-title">Quick Settings</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectLanguage(currentLanguage === 'en' ? 'mr' : 'en')}
+                    className="mobile-pref-pill"
+                  >
+                    <span style={{ fontSize: '12px' }}>🌐</span>
+                    <span>{currentLanguage === 'en' ? 'मराठी' : 'English'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onToggleTheme}
+                    className="mobile-pref-pill"
+                  >
+                    <span>{theme === 'dark' ? '☀️ Day' : '🌙 Dark'}</span>
+                  </button>
+
+                  {onToggleAudio && (
+                    <button
+                      type="button"
+                      onClick={onToggleAudio}
+                      className="mobile-pref-pill"
+                    >
+                      <span>{isAudioMuted ? '🔇 Unmute' : '🔊 Voice'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

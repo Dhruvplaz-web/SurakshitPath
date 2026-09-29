@@ -212,7 +212,7 @@ export const NavigationCockpitHud: React.FC<Props> = ({
             {currentManeuver.isRecommended ? (
               <>
                 <ShieldCheck size={14} color="#34d399" />
-                <span style={{ color: '#d1fae5' }}>Verified Lit Corridor · High Natural Surveillance</span>
+                <span style={{ color: '#d1fae5' }}>Verified Lit Corridor • High Natural Surveillance</span>
               </>
             ) : (
               <>

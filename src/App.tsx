@@ -36,7 +36,7 @@ import {
   PUNE_VERIFIED_ROADWORKS 
 } from './services/liveClosureService';
 import { WeatherRiskProfile, WEATHER_PROFILES } from './components/Commuter/NocturnalWeatherCard';
-import { AlertCircle, ArrowRight, ChevronDown, Sliders, ListFilter, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, ChevronDown, ChevronUp, Sliders, ListFilter, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { PrivacyPolicyModal } from './components/Legal/PrivacyPolicyModal';
 import { TermsOfServiceModal } from './components/Legal/TermsOfServiceModal';
 import { CookiePolicyModal } from './components/Legal/CookiePolicyModal';
@@ -770,6 +770,7 @@ export const App: React.FC = () => {
           onOpenSos={() => setIsSosOpen(true)}
           onOpenCabShield={() => setIsCabShieldOpen(true)}
           onOpenShelters={handleOpenShelters}
+        onOpenFakeCall={() => setIsFakeCallOpen(true)}
           onLockSafeHaven={handleLockSafeHaven}
           currentCoordinates={telemetry.currentPosition}
           userCoordinates={telemetry.currentPosition}
@@ -839,6 +840,7 @@ export const App: React.FC = () => {
           alignItems: 'center',
           gap: '12px',
           maxWidth: '560px',
+          width: 'min(560px, 92vw)',
           animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
           <div style={{
@@ -1172,7 +1174,7 @@ export const App: React.FC = () => {
         </aside>
 
         {/* Right Map Viewport */}
-        <section style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <section className="map-viewport-section" style={{ position: 'relative', width: '100%', height: '100%' }}>
           {/* Floating Sidebar Dock Toggle (Full-Screen Map Freedom) */}
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -1183,6 +1185,38 @@ export const App: React.FC = () => {
             <span>{isSidebarCollapsed ? "Show Routes" : "Full Map"}</span>
           </button>
 
+          {/* Mobile Bottom Peek Card: Thumb-friendly tap to re-open safe route panel */}
+          {isSidebarCollapsed && !isLiveGpsActive && (
+            <div
+              className="mobile-bottom-peek-card"
+              onClick={() => setIsSidebarCollapsed(false)}
+              role="button"
+              tabIndex={0}
+              title="Tap to view safe route choices and turn-by-turn navigation"
+              aria-label="Tap to view safe route choices and turn-by-turn navigation"
+            >
+              <div className="mobile-peek-drag-pill" />
+              <div className="mobile-peek-row">
+                <div className="mobile-peek-info">
+                  <div className="mobile-peek-badges">
+                    <span className="badge-shield-score">
+                      🛡️ {activeRoute.safetyScore}/100 Safe
+                    </span>
+                    <span className="badge-eta">
+                      {activeRoute.durationMinutes} min • {(activeRoute.distanceMeters / 1000).toFixed(1)} km
+                    </span>
+                  </div>
+                  <div className="mobile-peek-name">
+                    {activeRoute.name}
+                  </div>
+                </div>
+                <div className="mobile-peek-btn">
+                  <span>Routes</span>
+                  <ChevronUp size={16} />
+                </div>
+              </div>
+            </div>
+          )}
 
           <ErrorBoundary fallbackTitle="Map Cockpit Error">
             <MapCockpit
@@ -1203,7 +1237,12 @@ export const App: React.FC = () => {
               isSimulating={isSimulating}
               onToggleSimulation={() => setIsSimulating(!isSimulating)}
               isLiveNavigating={isLiveGpsActive}
-              onToggleLiveNavigation={setIsLiveGpsActive}
+              onToggleLiveNavigation={(active) => {
+                setIsLiveGpsActive(active);
+                if (active) {
+                  setIsSidebarCollapsed(true);
+                }
+              }}
               onLockSafeHaven={handleLockSafeHaven}
               currentLanguage={currentLanguage}
             />

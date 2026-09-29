@@ -137,7 +137,7 @@ export const StreetViewModal: React.FC<Props> = ({ isOpen, data, onClose }) => {
           {/* Key Audit Scorecard */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
             gap: '8px',
             marginBottom: '14px'
           }}>

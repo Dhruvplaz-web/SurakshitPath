@@ -1231,9 +1231,20 @@ body {
   }
 
   .workspace-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-    position: relative;
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  /* Full Screen Map Viewport on Mobile (Eliminates Black Screen Bug) */
+  .map-viewport-section {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 1 !important;
   }
 
   .mobile-sheet-drag-handle-bar {
@@ -1270,47 +1281,69 @@ body {
   }
 
   .sidebar-panel {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 65vh;
-    max-height: 85vh;
-    border-top: 1px solid var(--border-medium);
-    border-right: none;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
-    z-index: 1200;
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
-    padding-bottom: env(safe-area-inset-bottom, 32px);
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 62vh !important;
+    max-height: 80vh !important;
+    border-top: 1px solid var(--border-medium) !important;
+    border-right: none !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.7) !important;
+    z-index: 1200 !important;
+    transform: translateY(0) !important;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+    padding-bottom: env(safe-area-inset-bottom, 32px) !important;
   }
 
   .workspace-grid.sidebar-collapsed .sidebar-panel {
-    transform: translateY(100%);
-    opacity: 0;
-    pointer-events: none;
+    transform: translateY(100%) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
+  /* On mobile: Hide top-left "Show Routes" to avoid clutter (Bottom Peek card is the primary expander) */
   .map-sidebar-dock-toggle {
-    top: 12px;
-    left: 12px;
-    padding: 7px 12px;
-    font-size: 11px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-    background: var(--surface-glass-heavy);
+    display: none !important;
   }
 
-  .map-floating-overlay {
-    top: auto;
-    bottom: 64px;
-    right: var(--space-12);
-    left: var(--space-12);
-    max-width: none;
-    z-index: 1100;
+  /* On mobile: Move layer and compass map controls to top-left so they never collide with bottom route buttons */
+  .map-floating-layer-controls {
+    bottom: auto !important;
+    top: 12px !important;
+    left: 12px !important;
+    z-index: 900 !important;
+    gap: 6px !important;
+  }
+
+  .map-floating-layer-controls .btn-civic {
+    padding: 6px 10px !important;
+    font-size: 10px !important;
+    border-radius: 6px !important;
+  }
+
+  /* Mobile Layer Dropdown Flyout opens downward without getting cut off at top */
+  .map-layer-dropdown-menu {
+    bottom: auto !important;
+    top: calc(100% + 6px) !important;
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* On mobile: Hide duplicate floating SOS at bottom right because top header has 1-tap SOS */
+  .floating-sos-container {
+    display: none !important;
+  }
+
+  /* When route sheet is expanded on mobile, hide floating start nav on map to avoid clutter */
+  .workspace-grid:not(.sidebar-collapsed) .map-floating-start-nav {
+    display: none !important;
   }
 }
 
-/* Mobile Devices (<= 768px) */
+/* Mobile Devices (<= 768px) - Full Mobile Ergonomics */
 @media (max-width: 768px) {
   .civic-header {
     height: 56px;
@@ -1322,50 +1355,282 @@ body {
     display: none;
   }
 
-  .header-actions {
-    overflow-x: auto;
-    overflow-y: hidden;
+  /* Switch from Desktop Header Actions to Clean Mobile Cluster */
+  .desktop-header-actions {
+    display: none !important;
+  }
+
+  .mobile-header-cluster {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  /* High-Contrast 1-Tap SOS Emergency Trigger */
+  .mobile-header-sos-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    border: 1px solid #f87171;
+    border-radius: var(--radius-full);
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.45), 0 2px 8px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    min-height: 36px;
+    min-width: 44px;
+    overflow: hidden;
+  }
+
+  .mobile-sos-ping {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.25);
+    animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+    pointer-events: none;
+  }
+
+  /* Mobile Services & Utilities Menu Trigger Button */
+  .mobile-menu-trigger-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-full);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 36px;
+    min-width: 44px;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-menu-trigger-btn.active {
+    background: var(--surface-elevated);
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+  }
+
+  /* Mobile Services Dropdown Menu Drawer */
+  .mobile-dropdown-menu {
+    position: fixed;
+    top: 60px;
+    right: 10px;
+    left: 10px;
+    max-width: 420px;
+    margin: 0 auto;
+    background: rgba(18, 20, 29, 0.98);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 0, 0, 0.5);
+    z-index: 5000;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    max-width: calc(100vw - 210px);
-    white-space: nowrap;
-    gap: 6px;
-    padding: 2px 0;
+    animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  .header-actions::-webkit-scrollbar {
-    display: none;
+  .mobile-dropdown-header {
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
   }
 
-  .header-actions .btn-civic {
-    padding: 5px 8px;
+  .mobile-dropdown-section {
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mobile-dropdown-section-title {
     font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding: 0 4px;
+  }
+
+  .mobile-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    color: var(--text-primary);
+    transition: background 0.15s ease, border-color 0.15s ease;
+    min-height: 48px;
+  }
+
+  .mobile-dropdown-item:active {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent-amber);
+  }
+
+  .mobile-dropdown-item-interactive {
+    width: 100%;
+  }
+
+  .mobile-dropdown-item-interactive .necessity-dropdown-btn {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    min-height: 48px;
+  }
+
+  .mobile-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
     flex-shrink: 0;
   }
 
-  /* Compact button icons on mobile */
-  .header-actions .btn-label {
-    display: none;
+  .mobile-item-info {
+    flex: 1;
+    min-width: 0;
   }
 
+  .mobile-item-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .mobile-item-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-weather-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 4px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 40px;
+    transition: all 0.15s ease;
+  }
+
+  .mobile-weather-pill.active {
+    background: rgba(245, 158, 11, 0.18);
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+  }
+
+  .mobile-pref-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 40px;
+  }
+
+  .mobile-pref-pill:active {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: var(--border-medium);
+  }
+
+  /* Centered Roadside Necessity Flyout on Mobile */
+  .necessity-dropdown-flyout {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%) !important;
+    width: 92vw !important;
+    max-width: 400px !important;
+    max-height: 82vh !important;
+    z-index: 6000 !important;
+  }
+
+  /* Route Card Footer Overflow Prevention */
+  .gmaps-route-footer {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Strictly hide floating SOS on mobile (Header 1-tap SOS takes priority) */
   .floating-sos-container {
-    bottom: 24px !important;
-    right: 14px !important;
+    display: none !important;
+  }
+
+  /* Hide bottom footer on mobile to reserve 100% of viewport for interactive map & routes */
+  .civic-footer {
+    display: none !important;
   }
 
   .footer-breadcrumbs {
     display: none !important;
   }
 
-  .civic-footer {
-    padding: 6px 12px !important;
-    justify-content: center !important;
+  /* Position "Start Navigation" button safely above bottom peek card on mobile */
+  .map-floating-start-nav {
+    bottom: 74px !important;
+    z-index: 1200 !important;
   }
 
-  .civic-footer nav {
-    gap: 8px !important;
-    font-size: 10px !important;
-    justify-content: center !important;
+  .map-floating-start-nav .btn-civic {
+    padding: 10px 18px !important;
+    font-size: 12px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* Prevent iOS/Android auto-zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
   }
 
   .modal-overlay {
@@ -1376,8 +1641,127 @@ body {
     padding: 16px 14px;
     border-radius: var(--radius-lg);
     max-height: 92vh;
+    max-width: min(520px, 94vw) !important;
+  }
+
+  /* Mobile Bottom Peek Card (Flush docked at bottom when route sheet is minimized) */
+  .mobile-bottom-peek-card {
+    display: flex !important;
+    flex-direction: column !important;
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: rgba(18, 20, 29, 0.98) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border-top: 1px solid rgba(16, 185, 129, 0.4) !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75), 0 0 20px rgba(16, 185, 129, 0.15) !important;
+    padding: 8px 16px calc(10px + env(safe-area-inset-bottom, 12px)) !important;
+    z-index: 1250 !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  .mobile-peek-drag-pill {
+    width: 36px;
+    height: 4px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.25);
+    margin: 0 auto 6px;
+  }
+
+  .mobile-peek-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mobile-peek-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mobile-peek-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  .badge-shield-score {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 6px;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid var(--safe-emerald);
+    color: var(--safe-emerald);
+    border-radius: 9999px;
+  }
+
+  .badge-eta {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .mobile-peek-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-peek-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background: var(--safe-emerald);
+    color: #064e3b;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 800;
+    flex-shrink: 0;
   }
 }
+
+
+  /* Responsive Consent Banner on Mobile */
+  .consent-banner-fixed {
+    position: fixed !important;
+    bottom: 74px !important;
+    left: 12px !important;
+    right: 12px !important;
+    max-width: calc(100% - 24px) !important;
+    margin: 0 auto !important;
+    z-index: 5000 !important;
+  }
+
+  /* Smooth horizontal scroll for travel profile tabs on small devices */
+  .gmaps-travel-modes {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+
+  .gmaps-travel-modes::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .gmaps-mode-tab {
+    flex-shrink: 0 !important;
+  }
 
 /* Small Smart Phones (<= 480px) */
 @media (max-width: 480px) {
@@ -1407,3 +1791,15 @@ body {
     height: 70vh;
   }
 }
+
+/* ==========================================================================
+   Mobile-Only UI Elements (Strictly hidden on Desktop/PC > 768px)
+   ========================================================================== */
+.mobile-header-cluster {
+  display: none;
+}
+
+.mobile-bottom-peek-card {
+  display: none;
+}
+

@@ -226,6 +226,7 @@ export const NecessityDropdown: React.FC<Props> = ({
       {/* Expanded Glassmorphic Dropdown Flyout */}
       {isOpen && (
         <div
+          className="necessity-dropdown-flyout"
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',

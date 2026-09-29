@@ -37,7 +37,7 @@ interface Props {
   currentLanguage?: AppLanguage;
 }
 
-export type MapTileStyle = 'google_roads' | 'google_hybrid' | 'google_terrain' | 'osm';
+export type MapTileStyle = 'google_roads' | 'google_hybrid' | 'google_terrain' | 'osm' | 'carto_dark' | 'carto_voyager';
 
 export const MapCockpit: React.FC<Props> = ({
   userRole,
@@ -132,7 +132,22 @@ export const MapCockpit: React.FC<Props> = ({
 
     mapInstanceRef.current = map;
 
+    // Fix: Automatically invalidate Leaflet size whenever container resizes or sidebar toggles
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
+    // Also trigger immediate size invalidation after initial render
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
     return () => {
+      clearTimeout(timer);
+      resizeObserver.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -148,7 +163,21 @@ export const MapCockpit: React.FC<Props> = ({
     }
 
     let newLayer: L.TileLayer;
-    if (mapStyle === 'google_roads') {
+    if (mapStyle === 'carto_dark') {
+      // CARTO Dark Matter: High-contrast nocturnal safe-routing cartography
+      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
+        maxZoom: 20
+      });
+    } else if (mapStyle === 'carto_voyager') {
+      // CARTO Voyager: Crisp, clean daylight cartography
+      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
+        maxZoom: 20
+      });
+    } else if (mapStyle === 'google_roads') {
       // Google Maps Standard Roadmap (State/District boundaries, highways, full typography)
       newLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         subdomains: ['0', '1', '2', '3'],
@@ -724,7 +753,7 @@ export const MapCockpit: React.FC<Props> = ({
       )}
 
       {/* Floating Google Maps Style Cartography & Layer Controller */}
-      <div style={{
+      <div className="map-floating-layer-controls" style={{
         position: 'absolute',
         bottom: '20px',
         left: '16px',
@@ -763,19 +792,22 @@ export const MapCockpit: React.FC<Props> = ({
           </button>
 
           {isLayerMenuOpen && (
-            <div style={{
-              position: 'absolute',
-              bottom: 'calc(100% + 8px)',
-              left: '0',
-              width: '230px',
-              backgroundColor: 'var(--surface-elevated)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '10px',
-              boxShadow: '0 10px 28px rgba(0,0,0,0.4)',
-              padding: '6px',
-              zIndex: 2000,
-              animation: 'fadeIn 0.15s ease-out'
-            }}>
+            <div
+              className="map-layer-dropdown-menu"
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 8px)',
+                left: '0',
+                width: '230px',
+                backgroundColor: 'var(--surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '10px',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.4)',
+                padding: '6px',
+                zIndex: 2000,
+                animation: 'fadeIn 0.15s ease-out'
+              }}
+            >
               {/* Tile Provider Section */}
               <div style={{
                 padding: '4px 8px',
@@ -789,6 +821,8 @@ export const MapCockpit: React.FC<Props> = ({
                 Google Maps Cartography
               </div>
               {[
+                { id: 'carto_dark', label: '🌙 CARTO Dark Matter', desc: 'Nocturnal safe-routing high-contrast dark tiles' },
+                { id: 'carto_voyager', label: '🧭 CARTO Voyager', desc: 'Modern high-legibility street cartography' },
                 { id: 'google_roads', label: '🗺️ Google Maps Roadmap', desc: 'Standard streets, boundaries & names' },
                 { id: 'google_hybrid', label: '🛰️ Google Satellite Hybrid', desc: 'Photographic imagery + road labels' },
                 { id: 'google_terrain', label: '⛰️ Google Physical Terrain', desc: 'Topographic contours & elevations' },
@@ -929,6 +963,7 @@ export const MapCockpit: React.FC<Props> = ({
       {/* Google Maps Floating "Start Navigation" Button */}
       {!isNavigating && activeRoute.coordinates.length > 1 && (
         <div
+          className="map-floating-start-nav"
           style={{
             position: 'absolute',
             bottom: '24px',

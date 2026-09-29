@@ -98,7 +98,7 @@ export const EmergencyAssistCard: React.FC<Props> = ({
       ) : null}
 
       {/* Two Main Action Buttons: Fake Call & Share My Location */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '14px' }}>
         {/* Fake Call Button */}
         <button
           type="button"

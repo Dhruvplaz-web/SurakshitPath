@@ -321,11 +321,12 @@ export const SafeSheltersModal: React.FC<Props> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
                 gap: '12px',
                 boxShadow: '0 4px 16px rgba(16, 185, 129, 0.15)'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '220px' }}>
                 <div
                   style={{
                     width: '36px',

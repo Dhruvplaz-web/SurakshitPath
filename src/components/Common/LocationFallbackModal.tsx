@@ -13,38 +13,38 @@ interface Props {
 
 const COMMON_PUNE_HUBS: PuneLocation[] = [
   {
-    id: 'loc_tathawade_jspm',
-    name: 'JSPM Rajarshi Shahu College, Tathawade',
+    id: 'loc_jspm_tathawade',
+    name: 'JSPM RSCOE Tathawade',
     subtitle: 'Wakad-Tathawade Highway Link',
     coordinates: [18.6186, 73.7483],
     category: 'college'
   },
   {
-    id: 'loc_wakad_bhujbal',
-    name: 'Bhujbal Chowk Flyover, Wakad',
+    id: 'loc_bhumkar_chowk',
+    name: 'Bhumkar Chowk / Wakad Flyover',
     subtitle: 'Wakad-Hinjawadi Main Junction',
-    coordinates: [18.6015, 73.7650],
+    coordinates: [18.6085, 73.7540],
     category: 'transit'
   },
   {
-    id: 'loc_hinjawadi_ph1',
+    id: 'loc_hinjawadi_phase1',
     name: 'Infosys Circle, Hinjawadi Phase 1',
     subtitle: 'Rajiv Gandhi Infotech Park',
     coordinates: [18.5912, 73.7389],
     category: 'it_hub'
   },
   {
-    id: 'loc_baner_high_st',
+    id: 'loc_balewadi_highstreet',
     name: 'Balewadi High Street, Baner',
     subtitle: 'Commercial Arterial & Dining Corridor',
-    coordinates: [18.5680, 73.7810],
+    coordinates: [18.5775, 73.7695],
     category: 'landmark'
   },
   {
-    id: 'loc_kothrud_metro',
-    name: 'Vanaz Metro Station, Paud Road, Kothrud',
-    subtitle: 'Pune Metro Line 2 Terminal',
-    coordinates: [18.5085, 73.8040],
+    id: 'loc_kothrud_stand',
+    name: 'Kothrud Bus Stand / Vanaz Metro',
+    subtitle: 'Paud Road / Karve Road Terminal',
+    coordinates: [18.5074, 73.8077],
     category: 'transit'
   },
   {
@@ -92,13 +92,13 @@ export const LocationFallbackModal: React.FC<Props> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(6px)',
+        backgroundColor: 'rgba(0, 0, 0, 0.78)',
+        backdropFilter: 'blur(8px)',
         zIndex: 5000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px',
+        padding: '12px',
         animation: 'fadeIn 0.15s ease-out'
       }}
       onClick={onClose}
@@ -106,11 +106,11 @@ export const LocationFallbackModal: React.FC<Props> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: '520px',
+          maxWidth: 'min(520px, 94vw)',
           backgroundColor: 'var(--surface-elevated)',
           border: '1px solid var(--border-medium)',
-          borderRadius: '12px',
-          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.5)',
+          borderRadius: '16px',
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65)',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -165,7 +165,7 @@ export const LocationFallbackModal: React.FC<Props> = ({
         </div>
 
         {/* 2 Hero Primary Actions: Pick on Map & Retry GPS */}
-        <div style={{ padding: '16px 20px 8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div style={{ padding: '14px 16px 8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '10px' }}>
           <button
             type="button"
             onClick={() => {
@@ -212,7 +212,7 @@ export const LocationFallbackModal: React.FC<Props> = ({
         </div>
 
         {/* Search Bar */}
-        <div style={{ padding: '8px 20px' }}>
+        <div style={{ padding: '6px 16px 8px' }}>
           <div
             style={{
               display: 'flex',
@@ -235,10 +235,9 @@ export const LocationFallbackModal: React.FC<Props> = ({
                 border: 'none',
                 outline: 'none',
                 width: '100%',
-                fontSize: '12px',
+                fontSize: '14px',
                 color: 'var(--text-primary)'
               }}
-              autoFocus
             />
             {isSearching && (
               <span style={{ fontSize: '10px', color: 'var(--accent-amber)' }}>Searching...</span>
@@ -247,7 +246,7 @@ export const LocationFallbackModal: React.FC<Props> = ({
         </div>
 
         {/* Results or Common Pune Hubs */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 20px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 16px', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
             {searchResults.length > 0 ? `Search Results (${searchResults.length})` : 'Popular Pune Commuter Hubs'}
           </div>
@@ -280,7 +279,7 @@ export const LocationFallbackModal: React.FC<Props> = ({
                   (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-card)';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, marginRight: '8px' }}>
                   <div
                     style={{
                       width: '28px',
@@ -296,7 +295,7 @@ export const LocationFallbackModal: React.FC<Props> = ({
                   >
                     <MapPin size={14} />
                   </div>
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {loc.name}
                     </div>

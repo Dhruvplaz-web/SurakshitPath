@@ -341,7 +341,7 @@ export const RouteComparisonCard: React.FC<Props> = ({
             {isActive && (
               <div className="gmaps-route-footer">
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {currentLanguage === 'mr' ? 'निवडलेला मार्ग' : currentLanguage === 'hi' ? 'चयनित कॉरिडोर' : 'Selected Corridor'}
+                  {currentLanguage === 'mr' ? 'निवडलेला मार्ग' : currentLanguage === 'hi' ? 'चयनित मार्ग' : 'Selected Corridor'}
                 </div>
 
                 <div style={{ display: 'flex', gap: '6px' }}>

@@ -171,11 +171,12 @@ async def check_telemetry(req: TelemetryCheckRequest):
     is_stalled = req.stationary_duration_seconds > 120
     is_deviated = False
 
-    # Check minimum distance to corridor points
+    # Check minimum distance to corridor points with cos(lat) equirectangular projection
     lat, lon = req.current_position[0], req.current_position[1]
     if req.corridor_coordinates:
+        cos_lat = math.cos(math.radians(lat))
         min_dist_meters = min(
-            math.sqrt((lat - pt[0])**2 + (lon - pt[1])**2) * 111320
+            math.sqrt(((lat - pt[0]) * 111320)**2 + ((lon - pt[1]) * 111320 * cos_lat)**2)
             for pt in req.corridor_coordinates
         )
         if min_dist_meters > 50.0:
