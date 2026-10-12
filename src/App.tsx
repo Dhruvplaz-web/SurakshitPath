@@ -40,6 +40,7 @@ import { MobileBottomSheet } from './components/Mobile/MobileBottomSheet';
 import { MobileFloatingHud } from './components/Mobile/MobileFloatingHud';
 import { DiscreetEscortModal } from './components/Mobile/DiscreetEscortModal';
 import { MobileSearchModal } from './components/Mobile/MobileSearchModal';
+import { SurakshitKavachCockpit } from './components/Hardware/SurakshitKavachCockpit';
 
 export const App: React.FC = () => {
   // Read initial state from URL parameters (URL-First State Architecture with Boundary Validation)
@@ -114,6 +115,7 @@ export const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 960);
   const [isDiscreetModeOpen, setIsDiscreetModeOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isKavachModalOpen, setIsKavachModalOpen] = useState(false);
 
   // Responsive mobile viewport listener
   useEffect(() => {
@@ -510,6 +512,29 @@ export const App: React.FC = () => {
     }).catch(() => {});
   }, [telemetry.currentPosition]);
 
+  // Hardware SOS trigger from Surakshit-Kavach Smart Charm
+  const handleHardwareSosTriggered = useCallback((reason: string) => {
+    setAnomalyState({
+      isOpen: true,
+      reason: 'deviation',
+      countdownSeconds: 30,
+      sosDispatched: false
+    });
+    audioGuidance.speakSafetyCue(`Emergency alert: ${reason}. Verification countdown started.`);
+    apiClient.submitCitizenReport({
+      id: `kavach_sos_${Date.now()}`,
+      category: 'harassment_crowd',
+      title: 'Surakshit-Kavach Hardware Alert',
+      description: `[HARDWARE SMART CHARM TRIGGER] ${reason}`,
+      coordinates: telemetry.currentPosition,
+      reportedAt: Date.now(),
+      status: 'verified',
+      upvotes: 1,
+      urgency: 'high',
+      landmarkName: 'Surakshit-Kavach Smart Charm'
+    }).catch(() => {});
+  }, [telemetry.currentPosition]);
+
   return (
     <div className="app-container">
       {!isMobile ? (
@@ -522,6 +547,7 @@ export const App: React.FC = () => {
           onSelectLanguage={setCurrentLanguage}
           onOpenReportModal={() => setIsReportModalOpen(true)}
           onOpenShareModal={() => setIsShareModalOpen(true)}
+          onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
           theme={theme}
           onToggleTheme={handleToggleTheme}
         />
@@ -537,6 +563,7 @@ export const App: React.FC = () => {
           onOpenDiscreetMode={() => setIsDiscreetModeOpen(true)}
           onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
           onOpenReportModal={() => setIsReportModalOpen(true)}
+          onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
           activeLockedHavenId={activeLockedHavenId}
         />
       )}
@@ -965,6 +992,13 @@ export const App: React.FC = () => {
         onClose={() => setIsDiscreetModeOpen(false)}
         onSilentSosTriggered={handleSilentSosTriggered}
         currentCoordinates={telemetry.currentPosition}
+      />
+
+      {/* Surakshit-Kavach Smart Charm Hardware Cockpit */}
+      <SurakshitKavachCockpit
+        isOpen={isKavachModalOpen}
+        onClose={() => setIsKavachModalOpen(false)}
+        onTriggerSos={handleHardwareSosTriggered}
       />
 
       {/* Zero-Ad Privacy & Essential Storage Consent Banner */}

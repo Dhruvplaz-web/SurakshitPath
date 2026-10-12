@@ -7,3 +7,6 @@ __pycache__/
 api/surakshit_local.db
 .env
 .venv/
+android/local.properties
+.gradle/
+*.apk

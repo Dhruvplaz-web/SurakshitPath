@@ -9,7 +9,8 @@ import {
   Sun, 
   Calculator, 
   LifeBuoy, 
-  AlertCircle
+  AlertCircle,
+  Bluetooth
 } from 'lucide-react';
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
   onOpenDiscreetMode: () => void;
   onOpenRefugesModal: () => void;
   onOpenReportModal: () => void;
+  onOpenKavachCockpit?: () => void;
   activeLockedHavenId?: string | null;
 }
 
@@ -37,6 +39,7 @@ export const MobileFloatingHud: React.FC<Props> = ({
   onOpenDiscreetMode,
   onOpenRefugesModal,
   onOpenReportModal,
+  onOpenKavachCockpit,
   activeLockedHavenId
 }) => {
   return (
@@ -116,6 +119,32 @@ export const MobileFloatingHud: React.FC<Props> = ({
           >
             <Calculator size={15} color="#94a3b8" />
           </button>
+
+          {/* Surakshit-Kavach Smart Charm Cockpit Trigger FAB */}
+          {onOpenKavachCockpit && (
+            <button
+              onClick={onOpenKavachCockpit}
+              className="btn-civic"
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                padding: 0,
+                backgroundColor: 'rgba(30, 58, 138, 0.85)',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid rgba(96, 165, 250, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)',
+                color: '#60a5fa',
+                flexShrink: 0
+              }}
+              title="Open Surakshit-Kavach™ Smart Charm Cockpit"
+            >
+              <Bluetooth size={15} />
+            </button>
+          )}
 
           {/* Audio Guidance FAB */}
           <button

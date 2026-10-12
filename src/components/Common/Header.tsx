@@ -1,5 +1,4 @@
-import React from 'react';
-import { ShieldCheck, Moon, Sun, Activity, MapPin, Volume2, VolumeX, Share2, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Moon, Sun, Activity, MapPin, Volume2, VolumeX, Share2, AlertTriangle, Bluetooth } from 'lucide-react';
 import { UserRole, AppLanguage } from '../../types/routing';
 import { getTranslation } from '../../services/localizationService';
 import { RoleDropdown } from './RoleDropdown';
@@ -14,6 +13,7 @@ interface Props {
   onSelectLanguage: (lang: AppLanguage) => void;
   onOpenReportModal?: () => void;
   onOpenShareModal?: () => void;
+  onOpenKavachCockpit?: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
 }
@@ -27,6 +27,7 @@ export const Header: React.FC<Props> = ({
   onSelectLanguage,
   onOpenReportModal,
   onOpenShareModal,
+  onOpenKavachCockpit,
   theme,
   onToggleTheme
 }) => {
@@ -103,6 +104,30 @@ export const Header: React.FC<Props> = ({
           >
             <Share2 size={12} />
             <span>Share Pass</span>
+          </button>
+        )}
+
+        {/* Surakshit-Kavach Smart Charm Cockpit Trigger */}
+        {onOpenKavachCockpit && (
+          <button
+            onClick={onOpenKavachCockpit}
+            className="btn-civic"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              backgroundColor: 'rgba(59, 130, 246, 0.12)',
+              color: 'var(--haven-blue)',
+              border: '1px solid rgba(59, 130, 246, 0.4)',
+              borderRadius: '9999px'
+            }}
+            title="Open Surakshit-Kavach™ Smart Charm Hardware Cockpit"
+          >
+            <Bluetooth size={12} />
+            <span>Kavach Charm</span>
           </button>
         )}
 
