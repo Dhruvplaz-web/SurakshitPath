@@ -19,6 +19,7 @@ import { EventSimulator } from './components/Simulation/EventSimulator';
 import { CommuterTelemetrySimulator } from './components/Simulation/CommuterTelemetrySimulator';
 import { SafetyCheckModal } from './components/Simulation/SafetyCheckModal';
 import { calculatePuneRoutes } from './engine/graphRouter';
+import { getRoadAlignedRoutes } from './services/roadRoutingService';
 import { calculateCrossTrackDistance, evaluateTelemetryAnomaly } from './engine/telemetryWatchdog';
 import { TelematicsKalmanFilter } from './engine/kalmanFilter';
 import { audioGuidance } from './services/audioGuidance';
@@ -216,9 +217,33 @@ export const App: React.FC = () => {
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
   }, [userRole, currentLanguage, beta, activeRouteId, origin, destination]);
 
-  // Calculate Pune routes on demand for selected origin and destination
-  const routes = useMemo(() => {
+  // Calculate Pune & Maharashtra routes: initialized immediately with local road-aligned geometry,
+  // then asynchronously upgraded with live OpenStreetMap OSRM real-road geometry
+  const [routes, setRoutes] = useState<{ fastest: RouteOption; safe: RouteOption; balanced: RouteOption }>(() => {
     return calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates);
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    // Immediately provide local road-aligned routes
+    const immediateRoutes = calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates);
+    setRoutes(immediateRoutes);
+
+    // Asynchronously upgrade with live OSRM real-road geometry
+    getRoadAlignedRoutes(origin.coordinates, destination.coordinates, beta, dynamicEvents)
+      .then(liveRoutes => {
+        if (!isCancelled && liveRoutes) {
+          setRoutes(liveRoutes);
+        }
+      })
+      .catch(() => {
+        // Keeps immediateRoutes safely
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [beta, dynamicEvents, origin.coordinates, destination.coordinates]);
 
   // Active Route

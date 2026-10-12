@@ -208,20 +208,20 @@ export function buildRouteOption(
     }
   }
 
-  // Prepend originCoords if provided and within reasonable walking link (< 2.5km)
+  // Only connect originCoords if within immediate street snapping distance (< 90m), preventing diagonal block cuts
   if (originCoords && coordinates.length > 0) {
     const firstPt = coordinates[0];
     const distSq = (originCoords[0] - firstPt[0]) ** 2 + (originCoords[1] - firstPt[1]) ** 2;
-    if (distSq > 1e-8 && distSq < 0.0005) {
+    if (distSq > 1e-8 && distSq < 0.0000008) {
       coordinates.unshift(originCoords);
     }
   }
 
-  // Append destCoords if provided and within reasonable walking link (< 2.5km)
+  // Only connect destCoords if within immediate street snapping distance (< 90m), preventing diagonal block cuts
   if (destCoords && coordinates.length > 0) {
     const lastPt = coordinates[coordinates.length - 1];
     const distSq = (destCoords[0] - lastPt[0]) ** 2 + (destCoords[1] - lastPt[1]) ** 2;
-    if (distSq > 1e-8 && distSq < 0.0005) {
+    if (distSq > 1e-8 && distSq < 0.0000008) {
       coordinates.push(destCoords);
     }
   }
