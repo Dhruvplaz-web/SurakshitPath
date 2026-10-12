@@ -1,0 +1,36 @@
+# SurakshitPath (सुरक्षितपथ)
+> Transparent Safe-Route Planning for Night Travel · Problem Statement PS-20
+> Alignment: UN Sustainable Development Goals (SDG 5 Gender Equality & SDG 11 Sustainable Cities)
+> Primary Testbed: Pune Metropolitan Region (Tathawade, Hinjawadi, Aundh, Shivajinagar, Kothrud)
+
+## Overview
+SurakshitPath is an open, infrastructure-driven navigation and civic auditing platform. Traditional navigation engines optimize exclusively for distance, toll minimization, or travel time, routinely routing night pedestrians into dark, isolated alleys. SurakshitPath computes a transparent, multi-factor safety score based on verifiable physical infrastructure, active commercial presence, transit hubs, and safe havens.
+
+## Core Pillars & Mathematical Formulas
+1. Traversal Impedance Formula:
+   W(e) = L(e) * [1 + \beta * (1 - S(e))]
+   Where L(e) is segment length in meters, S(e) is safety score in [0.0, 1.0], and \beta is the user-controlled safety preference trade-off weight (0.0 to 1.5).
+
+2. Multi-Factor Safety Scoring Formula:
+   S(e) = 0.35 * L_e + 0.25 * A_e + 0.15 * T_e + 0.15 * E_e + 0.10 * R_e
+   - L_e: Street lighting score (photometric lux & OSM street_lamp tag density)
+   - A_e: Commercial vibrancy & active visual frontage (cafes, pharmacies, retail open past 22:00)
+   - T_e: Transit & arterial proximity (metro stations, PMPML/BRTS bus stops)
+   - E_e: Emergency safe haven access (24/7 pharmacies, police stations, manned petrol pumps within 300m)
+   - R_e: Road hierarchy & pedestrian sidewalk infrastructure
+
+3. Explainability Architecture:
+   - TreeSHAP feature attribution: deconstructs ML-predicted safety into positive and negative micro-influences without black-box opacity.
+   - Anti-Redlining Design Directive: zero reliance on static historical crime statistics to prevent systemic discrimination against socio-economically marginalized neighborhoods.
+
+4. 4 Stakeholder Roles:
+   - Commuter: Dual-route comparison (Fastest vs. High-Visibility), interactive safety slider, audio guidance in English/Marathi/Hindi.
+   - Trusted Guardian: Live EKF telemetry tracking, corridor geofence watchdog, 1-tap SOS trigger.
+   - Suraksha Sahayak (Volunteer): Verified community first-responder radar, active SOS notification routing.
+   - Civic Authority (PMC/PCMC): SCADA smart-pole telemetry, dark-spot audit export, citizen infrastructure triage.
+
+## Emergency Contacts (Pune Metropolitan Region)
+- National Emergency Helpline: 112
+- Women Safety Helpline: 1091
+- Pune City Police Damini Squad: 020-26126296 / 1091
+- Child Helpline: 1098

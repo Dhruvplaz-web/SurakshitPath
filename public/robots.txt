@@ -1,0 +1,13 @@
+# https://www.robotstxt.org/robotstxt.html
+# SurakshitPath - Transparent Safe-Route Planning for Night Travel
+
+User-agent: *
+Allow: /
+Disallow: /admin/telemetry-raw
+Disallow: /api/private/
+
+# Sitemap Location
+Sitemap: https://surakshitpath.org/sitemap.xml
+
+# LLM Crawler Context
+Allow: /llms.txt
