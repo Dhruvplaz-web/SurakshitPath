@@ -36,6 +36,10 @@ import { AboutUsModal } from './components/Pages/AboutUsModal';
 import { ContactUsModal } from './components/Pages/ContactUsModal';
 import { NotFoundView } from './components/Pages/NotFoundView';
 import { Footer } from './components/Common/Footer';
+import { MobileBottomSheet } from './components/Mobile/MobileBottomSheet';
+import { MobileFloatingHud } from './components/Mobile/MobileFloatingHud';
+import { DiscreetEscortModal } from './components/Mobile/DiscreetEscortModal';
+import { MobileSearchModal } from './components/Mobile/MobileSearchModal';
 
 export const App: React.FC = () => {
   // Read initial state from URL parameters (URL-First State Architecture with Boundary Validation)
@@ -105,6 +109,20 @@ export const App: React.FC = () => {
   const [isBetaOpen, setIsBetaOpen] = useState(false);
   const [isExplainOpen, setIsExplainOpen] = useState(false);
   const [isSegmentsOpen, setIsSegmentsOpen] = useState(false);
+
+  // Mobile Viewport and Discreet Escort States
+  const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 960);
+  const [isDiscreetModeOpen, setIsDiscreetModeOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+
+  // Responsive mobile viewport listener
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 960);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Synchronize data-theme on root HTML and URL/LocalStorage
   useEffect(() => {
@@ -470,24 +488,63 @@ export const App: React.FC = () => {
     );
   }
 
+  // Silent SOS trigger from Discreet Escort Calculator
+  const handleSilentSosTriggered = useCallback(() => {
+    setAnomalyState(prev => ({
+      ...prev,
+      isOpen: false,
+      sosDispatched: true
+    }));
+    audioGuidance.speakSafetyCue('Silent escort emergency beacon transmitted to emergency network.');
+    apiClient.submitCitizenReport({
+      id: `sos_${Date.now()}`,
+      category: 'harassment_crowd',
+      title: 'Silent Escort SOS Beacon',
+      description: '[DISCREET ESCORT SILENT SOS] Silent panic beacon dispatched via disguised interface.',
+      coordinates: telemetry.currentPosition,
+      reportedAt: Date.now(),
+      status: 'verified',
+      upvotes: 1,
+      urgency: 'high',
+      landmarkName: 'Discreet Escort Trigger'
+    }).catch(() => {});
+  }, [telemetry.currentPosition]);
+
   return (
     <div className="app-container">
-      <Header
-        currentRole={userRole}
-        onSelectRole={setUserRole}
-        isAudioMuted={isAudioMuted}
-        onToggleAudio={handleToggleAudio}
-        currentLanguage={currentLanguage}
-        onSelectLanguage={setCurrentLanguage}
-        onOpenReportModal={() => setIsReportModalOpen(true)}
-        onOpenShareModal={() => setIsShareModalOpen(true)}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-      />
+      {!isMobile ? (
+        <Header
+          currentRole={userRole}
+          onSelectRole={setUserRole}
+          isAudioMuted={isAudioMuted}
+          onToggleAudio={handleToggleAudio}
+          currentLanguage={currentLanguage}
+          onSelectLanguage={setCurrentLanguage}
+          onOpenReportModal={() => setIsReportModalOpen(true)}
+          onOpenShareModal={() => setIsShareModalOpen(true)}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+        />
+      ) : (
+        <MobileFloatingHud
+          origin={origin}
+          destination={destination}
+          onOpenSearch={() => setIsMobileSearchOpen(true)}
+          isAudioMuted={isAudioMuted}
+          onToggleAudio={handleToggleAudio}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          onOpenDiscreetMode={() => setIsDiscreetModeOpen(true)}
+          onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
+          onOpenReportModal={() => setIsReportModalOpen(true)}
+          activeLockedHavenId={activeLockedHavenId}
+        />
+      )}
 
       <main className={`workspace-grid ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-        {/* Left Sidebar Drawer */}
-        <aside className="sidebar-panel">
+        {/* Left Sidebar Drawer (Desktop Only) */}
+        {!isMobile && (
+          <aside className="sidebar-panel">
           {userRole === 'admin' && (
             <section className="sidebar-section">
               <ErrorBoundary fallbackTitle="Admin Dashboard Error">
@@ -693,18 +750,21 @@ export const App: React.FC = () => {
             </>
           )}
         </aside>
+        )}
 
         {/* Right Map Viewport */}
         <section style={{ position: 'relative', width: '100%', height: '100%' }}>
-          {/* Floating Sidebar Dock Toggle (Full-Screen Map Freedom) */}
-          <button
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="map-sidebar-dock-toggle"
-            title={isSidebarCollapsed ? "Expand Navigation & Routes Sidebar" : "Hide Sidebar for Full-Screen Map Freedom"}
-          >
-            {isSidebarCollapsed ? <PanelLeftOpen size={14} color="var(--accent-amber)" /> : <PanelLeftClose size={14} />}
-            <span>{isSidebarCollapsed ? "Show Routes" : "Full Map"}</span>
-          </button>
+          {/* Floating Sidebar Dock Toggle (Full-Screen Map Freedom - Desktop Only) */}
+          {!isMobile && (
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="map-sidebar-dock-toggle"
+              title={isSidebarCollapsed ? "Expand Navigation & Routes Sidebar" : "Hide Sidebar for Full-Screen Map Freedom"}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={14} color="var(--accent-amber)" /> : <PanelLeftClose size={14} />}
+              <span>{isSidebarCollapsed ? "Show Routes" : "Full Map"}</span>
+            </button>
+          )}
 
           <ErrorBoundary fallbackTitle="Map Cockpit Error">
             <MapCockpit
@@ -834,16 +894,77 @@ export const App: React.FC = () => {
         onClose={() => setIsShareModalOpen(false)}
       />
 
-      {/* Docked Civic Footer with Legal & A11y Links */}
-      <Footer
-        onOpenPrivacy={() => setIsPrivacyOpen(true)}
-        onOpenTerms={() => setIsTermsOpen(true)}
-        onOpenCookies={() => setIsCookiesOpen(true)}
-        onOpenA11y={() => setIsA11yOpen(true)}
-        onOpenAbout={() => setIsAboutOpen(true)}
-        onOpenContact={() => setIsContactOpen(true)}
-        originName={origin.name}
-        destinationName={destination.name}
+      {/* Docked Civic Footer with Legal & A11y Links (Desktop Only) */}
+      {!isMobile && (
+        <Footer
+          onOpenPrivacy={() => setIsPrivacyOpen(true)}
+          onOpenTerms={() => setIsTermsOpen(true)}
+          onOpenCookies={() => setIsCookiesOpen(true)}
+          onOpenA11y={() => setIsA11yOpen(true)}
+          onOpenAbout={() => setIsAboutOpen(true)}
+          onOpenContact={() => setIsContactOpen(true)}
+          originName={origin.name}
+          destinationName={destination.name}
+        />
+      )}
+
+      {/* Mobile Draggable Bottom Sheet */}
+      {isMobile && userRole === 'commuter' && (
+        <MobileBottomSheet
+          activeRoute={activeRoute}
+          routes={routes}
+          activeRouteId={activeRouteId}
+          onSelectRoute={(id) => {
+            setActiveRouteId(id);
+            const selRoute = id === 'route_fastest' ? routes.fastest : id === 'route_balanced' ? routes.balanced : routes.safe;
+            audioGuidance.speakSafetyCue(`Switched to ${selRoute.name}. Safety score: ${selRoute.safetyScore} out of 100.`);
+          }}
+          origin={origin}
+          destination={destination}
+          beta={beta}
+          onBetaChange={setBeta}
+          selectedEdgeId={selectedEdgeId}
+          onSelectSegment={setSelectedEdgeId}
+          onOpenReportModal={() => setIsReportModalOpen(true)}
+          onOpenShareModal={() => setIsShareModalOpen(true)}
+          onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
+          activeLockedHavenId={activeLockedHavenId}
+          isSimulating={isSimulating}
+          onToggleSimulating={() => {
+            const nextSim = !isSimulating;
+            setIsSimulating(nextSim);
+            if (nextSim) {
+              audioGuidance.speakSafetyCue(`Starting trip simulation from ${origin.name} to ${destination.name}. Safe corridor tracking active.`);
+            }
+          }}
+        />
+      )}
+
+      {/* Mobile Search & Destination Modal */}
+      <MobileSearchModal
+        isOpen={isMobileSearchOpen}
+        onClose={() => setIsMobileSearchOpen(false)}
+        origin={origin}
+        destination={destination}
+        onSelectOrigin={setOrigin}
+        onSelectDestination={(loc) => {
+          setDestination(loc);
+          setActiveLockedHavenId(null);
+        }}
+        onSwapLocations={handleSwapLocations}
+        onPickOnMap={(target) => {
+          setIsPickingOnMap(target);
+          setIsMobileSearchOpen(false);
+        }}
+        isPickingOnMap={isPickingOnMap}
+      />
+
+      {/* Discreet Escort Mode Modal (Disguised Functional Calculator with Panic PIN) */}
+      <DiscreetEscortModal
+        isOpen={isDiscreetModeOpen}
+        onClose={() => setIsDiscreetModeOpen(false)}
+        onSilentSosTriggered={handleSilentSosTriggered}
+        currentCoordinates={telemetry.currentPosition}
       />
 
       {/* Zero-Ad Privacy & Essential Storage Consent Banner */}
