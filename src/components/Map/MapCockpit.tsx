@@ -1,10 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { RouteOption, SafeHaven, DynamicEvent, TelemetryState, UserRole, CitizenReport } from '../../types/routing';
-import { PUNE_SAFE_HAVENS } from '../../data/safeHavens';
+import { RouteOption, SafeHaven, DynamicEvent, TelemetryState, UserRole, CitizenReport, TravelProfile, AppLanguage } from '../../types/routing';
+import { getTranslation } from '../../services/localizationService';
+import { useLiveShelters } from '../../services/liveShelterService';
 import { PUNE_DARK_SPOTS } from '../../data/civicAdminData';
 import { PuneLocation } from '../../services/geocodingService';
-import { Layers, ChevronDown } from 'lucide-react';
+import {
+  MAHARASHTRA_STATE_BOUNDARY,
+  PUNE_DISTRICT_BOUNDARY,
+  PMC_PCMC_URBAN_BOUNDARY,
+  MAJOR_CITIES_AND_DISTRICTS
+} from '../../data/maharashtraBoundaries';
+import { Layers, ChevronDown, Check, Compass, Navigation } from 'lucide-react';
+import { NavigationCockpitHud } from '../Navigation/NavigationCockpitHud';
 
 interface Props {
   userRole: UserRole;
@@ -20,10 +28,16 @@ interface Props {
   onMapPickLocation: (target: 'origin' | 'destination', coords: [number, number]) => void;
   citizenReports?: CitizenReport[];
   theme?: 'dark' | 'light';
+  travelProfile?: TravelProfile;
+  isSimulating?: boolean;
+  onToggleSimulation?: () => void;
+  isLiveNavigating?: boolean;
+  onToggleLiveNavigation?: (nav: boolean) => void;
   onLockSafeHaven?: (haven: SafeHaven) => void;
-  activeLockedHavenId?: string | null;
-  onOpenRefugesModal?: () => void;
+  currentLanguage?: AppLanguage;
 }
+
+export type MapTileStyle = 'google_roads' | 'google_hybrid' | 'google_terrain' | 'osm' | 'carto_dark' | 'carto_voyager';
 
 export const MapCockpit: React.FC<Props> = ({
   userRole,
@@ -39,58 +53,107 @@ export const MapCockpit: React.FC<Props> = ({
   onMapPickLocation,
   citizenReports = [],
   theme = 'dark',
+  travelProfile = 'pedestrian',
+  isSimulating = false,
+  onToggleSimulation,
+  isLiveNavigating = false,
+  onToggleLiveNavigation,
   onLockSafeHaven,
-  activeLockedHavenId,
-  onOpenRefugesModal
+  currentLanguage = 'en'
 }) => {
-  const [mapStyle, setMapStyle] = useState<'night' | 'streets' | 'satellite'>(theme === 'light' ? 'streets' : 'night');
+  const t = getTranslation(currentLanguage);
+  const [mapStyle, setMapStyle] = useState<MapTileStyle>('google_roads');
+  const [showBoundaries, setShowBoundaries] = useState<boolean>(true);
+  const [showCityLabels, setShowCityLabels] = useState<boolean>(true);
   const [isLayerMenuOpen, setIsLayerMenuOpen] = useState(false);
-  const [isHavensVisible, setIsHavensVisible] = useState(true);
-  const [havenCategoryFilter, setHavenCategoryFilter] = useState<'all' | 'police' | 'pharmacy_247' | 'hospital' | 'commercial_refuge' | 'transit_hub'>('all');
+  const { havens: liveHavens } = useLiveShelters(origin.coordinates);
+
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  const boundariesLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const citiesLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const routesLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const havensLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const eventsLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const markersLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const maneuversLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const commuterMarkerRef = useRef<L.Marker | null>(null);
+
+  const [isNavigating, setIsNavigating] = useState(isLiveNavigating);
+  const [activeManeuverIndex, setActiveManeuverIndex] = useState(0);
+
+  useEffect(() => {
+    setIsNavigating(isLiveNavigating);
+    if (isLiveNavigating && activeRoute.maneuvers && activeRoute.maneuvers.length > 0) {
+      zoomToManeuver(0);
+    }
+  }, [isLiveNavigating]);
+
+  const zoomToManeuver = (idx: number) => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const maneuvers = activeRoute.maneuvers;
+    if (maneuvers && maneuvers[idx]) {
+      const coord = maneuvers[idx].coordinates;
+      map.flyTo(coord, 17.5, { animate: true, duration: 1.0 });
+    }
+  };
+
+  const handleStartNavigation = () => {
+    setIsNavigating(true);
+    setActiveManeuverIndex(0);
+    zoomToManeuver(0);
+    onToggleLiveNavigation?.(true);
+  };
 
   // Initialize Map Instance
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Centered between Tathawade and Kothrud
+    // Centered at Pune metropolitan corridor
     const map = L.map(mapContainerRef.current, {
-      center: [18.5600, 73.7850],
+      center: [18.5500, 73.8100],
       zoom: 12,
       zoomControl: false
     });
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Initialize layer groups
+    // Initialize layer groups in proper z-order
+    boundariesLayerGroupRef.current = L.layerGroup().addTo(map);
+    citiesLayerGroupRef.current = L.layerGroup().addTo(map);
     routesLayerGroupRef.current = L.layerGroup().addTo(map);
     havensLayerGroupRef.current = L.layerGroup().addTo(map);
     eventsLayerGroupRef.current = L.layerGroup().addTo(map);
+    maneuversLayerGroupRef.current = L.layerGroup().addTo(map);
     markersLayerGroupRef.current = L.layerGroup().addTo(map);
 
     mapInstanceRef.current = map;
 
+    // Fix: Automatically invalidate Leaflet size whenever container resizes or sidebar toggles
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
+    // Also trigger immediate size invalidation after initial render
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
     return () => {
+      clearTimeout(timer);
+      resizeObserver.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
 
-  // Automatically adapt map style when theme changes
-  useEffect(() => {
-    if (mapStyle !== 'satellite') {
-      setMapStyle(theme === 'light' ? 'streets' : 'night');
-    }
-  }, [theme]);
-
-  // Update Tile Layer dynamically based on user-selected style (100% Zero-Watermark)
+  // Update Tile Layer dynamically based on user-selected Google Maps style
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -100,20 +163,45 @@ export const MapCockpit: React.FC<Props> = ({
     }
 
     let newLayer: L.TileLayer;
-    if (mapStyle === 'night') {
-      newLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        className: 'night-mode-tile',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Night Vision Radar',
-        maxZoom: 19
+    if (mapStyle === 'carto_dark') {
+      // CARTO Dark Matter: High-contrast nocturnal safe-routing cartography
+      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
+        maxZoom: 20
       });
-    } else if (mapStyle === 'satellite') {
-      newLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; High-Resolution Satellite',
-        maxZoom: 19
+    } else if (mapStyle === 'carto_voyager') {
+      // CARTO Voyager: Crisp, clean daylight cartography
+      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
+        maxZoom: 20
+      });
+    } else if (mapStyle === 'google_roads') {
+      // Google Maps Standard Roadmap (State/District boundaries, highways, full typography)
+      newLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        subdomains: ['0', '1', '2', '3'],
+        attribution: '&copy; Google Maps · High-Resolution Roadmap',
+        maxZoom: 21
+      });
+    } else if (mapStyle === 'google_hybrid') {
+      // Google Maps Satellite Imagery with Road & District Overlays
+      newLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        subdomains: ['0', '1', '2', '3'],
+        attribution: '&copy; Google Maps · Satellite Hybrid Cartography',
+        maxZoom: 21
+      });
+    } else if (mapStyle === 'google_terrain') {
+      // Google Maps Physical Terrain & Contours
+      newLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+        subdomains: ['0', '1', '2', '3'],
+        attribution: '&copy; Google Maps · Topographic Terrain',
+        maxZoom: 20
       });
     } else {
+      // OpenStreetMap Classic Daylight
       newLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Clean Daylight',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19
       });
     }
@@ -121,6 +209,94 @@ export const MapCockpit: React.FC<Props> = ({
     newLayer.addTo(map);
     tileLayerRef.current = newLayer;
   }, [mapStyle]);
+
+  // Render Administrative Boundaries & District / City Labels
+  useEffect(() => {
+    const boundGroup = boundariesLayerGroupRef.current;
+    const cityGroup = citiesLayerGroupRef.current;
+    if (!boundGroup || !cityGroup) return;
+
+    boundGroup.clearLayers();
+    cityGroup.clearLayers();
+
+    if (showBoundaries) {
+      // 1. Maharashtra State Boundary Outline
+      const statePoly = L.polygon(MAHARASHTRA_STATE_BOUNDARY.coordinates, {
+        color: '#2563eb',
+        fillColor: 'rgba(37, 99, 235, 0.03)',
+        fillOpacity: 0.05,
+        weight: 3.0,
+        dashArray: '8, 8'
+      });
+      boundGroup.addLayer(statePoly);
+
+      // 2. Pune District Boundary (Official limits encompassing Mulshi, Haveli, Maval, Khed)
+      const distPoly = L.polygon(PUNE_DISTRICT_BOUNDARY.coordinates, {
+        color: '#d97706',
+        fillColor: 'rgba(217, 119, 6, 0.05)',
+        fillOpacity: 0.08,
+        weight: 2.5,
+        dashArray: '6, 6'
+      });
+      boundGroup.addLayer(distPoly);
+
+      // 3. PMC & PCMC Municipal Corporation Urban Twin Core
+      const metroPoly = L.polygon(PMC_PCMC_URBAN_BOUNDARY.coordinates, {
+        color: '#059669',
+        fillColor: 'rgba(5, 150, 105, 0.08)',
+        fillOpacity: 0.10,
+        weight: 2.2
+      });
+      boundGroup.addLayer(metroPoly);
+    }
+
+    if (showCityLabels) {
+      // 4. City & District Badges
+      MAJOR_CITIES_AND_DISTRICTS.forEach(city => {
+        const isPuneOrPCMC = city.id === 'city_pune' || city.id === 'city_pcmc';
+        const isCapital = city.category === 'state_capital';
+
+        const labelHtml = `
+          <div style="
+            background: ${isCapital ? 'rgba(30, 27, 75, 0.92)' : isPuneOrPCMC ? 'rgba(6, 78, 59, 0.92)' : 'rgba(15, 23, 42, 0.90)'};
+            color: #ffffff;
+            border: 1.5px solid ${isCapital ? '#818cf8' : isPuneOrPCMC ? '#34d399' : '#94a3b8'};
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            backdrop-filter: blur(4px);
+            letter-spacing: 0.2px;
+          ">
+            <span>${isCapital ? '⭐' : isPuneOrPCMC ? '🎯' : '📍'}</span>
+            <span>${city.name}</span>
+          </div>
+        `;
+
+        const icon = L.divIcon({
+          className: 'city-district-badge',
+          html: labelHtml,
+          iconSize: [120, 26],
+          iconAnchor: [60, 13]
+        });
+
+        const marker = L.marker(city.coordinates, { icon });
+        marker.bindPopup(`
+          <div style="font-family:'Inter',sans-serif; font-size:12px;">
+            <strong>${city.name}</strong><br/>
+            <span>${city.marathiName}</span><br/>
+            <span style="color:#64748b; font-size:11px;">District: ${city.district} · State: ${city.state}</span>
+          </div>
+        `);
+        cityGroup.addLayer(marker);
+      });
+    }
+  }, [showBoundaries, showCityLabels]);
 
   // Map Click Listener for picking origin/destination
   useEffect(() => {
@@ -139,121 +315,113 @@ export const MapCockpit: React.FC<Props> = ({
     };
   }, [isPickingOnMap, onMapPickLocation]);
 
-  // Render Safe Havens with polished UI badges & Ask for Angela markers
+  // Render Safe Havens with polished UI badges
   useEffect(() => {
     const layerGroup = havensLayerGroupRef.current;
     if (!layerGroup) return;
 
     layerGroup.clearLayers();
-    if (!isHavensVisible) return;
 
-    const filteredHavens = PUNE_SAFE_HAVENS.filter(h => 
-      havenCategoryFilter === 'all' || h.type === havenCategoryFilter
-    );
-
-    filteredHavens.forEach((haven: SafeHaven) => {
+    liveHavens.forEach((haven: SafeHaven) => {
       let iconSymbol = '🛡️';
       let iconBg = theme === 'dark' ? '#0f172a' : '#ffffff';
       let borderColor = '#3b82f6';
-      let ringGlow = '';
+      let typeLabel = 'Safe Haven';
 
-      const isLocked = activeLockedHavenId === haven.id;
-      if (isLocked) {
-        borderColor = '#10b981';
-        ringGlow = '0 0 0 4px rgba(16, 185, 129, 0.4), 0 4px 14px rgba(16, 185, 129, 0.6)';
-      }
-
-      if (haven.type === 'police') {
-        borderColor = isLocked ? '#10b981' : '#3b82f6';
+      if (haven.type === 'women_shelter' || haven.type === 'crisis_shelter') {
+        borderColor = '#ec4899';
+        iconSymbol = '🏠';
+        typeLabel = haven.type === 'women_shelter' ? "Women's Safe Shelter" : 'Crisis Refuge';
+      } else if (haven.type === 'helpline_centre') {
+        borderColor = '#ec4899';
+        iconSymbol = '📞';
+        typeLabel = '24/7 Helpline Centre';
+      } else if (haven.type === 'police') {
+        borderColor = '#3b82f6';
         iconSymbol = '🛡️';
-      } else if (haven.type === 'pharmacy_247') {
-        borderColor = isLocked ? '#10b981' : '#10b981';
+        typeLabel = 'Police Chowki';
+      } else if (haven.type === 'pharmacy' || haven.type === 'pharmacy_247') {
+        borderColor = '#10b981';
         iconSymbol = '💊';
+        typeLabel = '24/7 Pharmacy';
       } else if (haven.type === 'hospital') {
-        borderColor = isLocked ? '#10b981' : '#ef4444';
+        borderColor = '#ef4444';
         iconSymbol = '🏥';
-      } else if (haven.type === 'commercial_refuge') {
-        borderColor = isLocked ? '#10b981' : '#f59e0b';
-        iconSymbol = '⛽';
+        typeLabel = 'Emergency Hospital';
+      } else if (haven.type === 'temple_sanctuary' || haven.type === 'community_sanctuary') {
+        borderColor = '#f59e0b';
+        iconSymbol = '🛕';
+        typeLabel = '24/7 Temple / Sanctuary';
+      } else if (haven.type === 'supermart_247') {
+        borderColor = '#a855f7';
+        iconSymbol = '🛒';
+        typeLabel = '24/7 Staffed Supermart';
       } else {
-        borderColor = isLocked ? '#10b981' : '#8b5cf6';
-        iconSymbol = '🚌';
+        borderColor = '#3b82f6';
+        iconSymbol = '🛟';
+        typeLabel = 'Transit Haven';
       }
 
       const iconHtml = `
-        <div style="background:${iconBg}; border:2.5px solid ${borderColor}; border-radius:50%; width:${isLocked ? '32px' : '28px'}; height:${isLocked ? '32px' : '28px'}; display:flex; align-items:center; justify-content:center; font-size:${isLocked ? '15px' : '13px'}; box-shadow:${ringGlow || '0 3px 10px rgba(0,0,0,0.35)'}; transition:all 0.2s ease;">
+        <div style="background:${iconBg}; border:2px solid ${borderColor}; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:0 3px 12px rgba(0,0,0,0.35); transition:transform 0.15s ease;">
           <span>${iconSymbol}</span>
         </div>
       `;
 
       const customIcon = L.divIcon({
-        className: isLocked ? 'custom-haven-pin-locked' : 'custom-haven-pin',
+        className: 'custom-haven-pin',
         html: iconHtml,
-        iconSize: isLocked ? [32, 32] : [28, 28],
-        iconAnchor: isLocked ? [16, 16] : [14, 14]
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
       });
 
       const marker = L.marker(haven.coordinates, { icon: customIcon });
-
-      // Create rich DOM-based popup with interactive diversion trigger
-      const popupDiv = document.createElement('div');
-      popupDiv.style.cssText = "font-family:'Inter',sans-serif; min-width:215px; line-height:1.45; padding:2px;";
-      const titleColor = theme === 'dark' ? '#f8fafc' : '#0f172a';
-      const addressColor = theme === 'dark' ? '#94a3b8' : '#475569';
-      const detailColor = theme === 'dark' ? '#cbd5e1' : '#64748b';
-      const timingColor = theme === 'dark' ? '#34d399' : '#059669';
-      const callColor = theme === 'dark' ? '#60a5fa' : '#2563eb';
-
-      popupDiv.innerHTML = `
-        <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px; flex-wrap:wrap;">
-          <span style="font-size:9.5px; font-weight:700; padding:2px 5px; border-radius:4px; background:${borderColor}20; color:${borderColor};">
-            ${haven.type.replace('_', ' ').toUpperCase()}
-          </span>
-          ${haven.askForAngelaTrained ? '<span style="font-size:9.5px; font-weight:700; padding:2px 5px; border-radius:4px; background:rgba(245,158,11,0.2); color:#f59e0b;">Ask for Angela</span>' : ''}
-          ${isLocked ? '<span style="font-size:9.5px; font-weight:700; padding:2px 5px; border-radius:4px; background:rgba(16,185,129,0.25); color:#34d399;">LOCKED REFUGE</span>' : ''}
+      const popupHtml = `
+        <div style="font-family:'Inter',system-ui,sans-serif; min-width:210px; max-width:260px; line-height:1.4; color:#0f172a; padding:2px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; gap:6px;">
+            <span style="font-size:10px; font-weight:800; text-transform:uppercase; color:${borderColor}; background:rgba(0,0,0,0.06); padding:2px 6px; border-radius:4px;">
+              ${iconSymbol} ${typeLabel}
+            </span>
+            ${haven.trustScore ? `<span style="font-size:10px; font-weight:800; color:#059669; background:#ecfdf5; border:1px solid #a7f3d0; padding:1px 5px; border-radius:4px;">⭐ ${haven.trustScore}% Trust</span>` : ''}
+          </div>
+          <div style="font-weight:700; font-size:13px; color:#0f172a; margin-bottom:2px;">${haven.name}</div>
+          <div style="font-size:11px; color:#475569; margin-bottom:4px;">${haven.address}</div>
+          ${haven.verifiedBy ? `<div style="font-size:10px; color:#64748b; margin-bottom:4px;">✓ Verified: ${haven.verifiedBy}</div>` : ''}
+          <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; margin-top:4px; border-top:1px solid #e2e8f0; padding-top:4px;">
+            <span style="color:#059669; font-weight:700;">🟢 ${haven.timing}</span>
+            ${haven.contact ? `<a href="tel:${haven.contact}" style="color:#2563eb; font-weight:700; text-decoration:none;">📞 ${haven.contact}</a>` : ''}
+          </div>
+          ${onLockSafeHaven ? `
+            <button
+              id="haven-btn-${haven.id}"
+              style="margin-top:8px; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; background:#2563eb; color:#ffffff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(37,99,235,0.3);"
+            >
+              🧭 Reroute to this Shelter
+            </button>
+          ` : ''}
         </div>
-        <div style="font-weight:700; font-size:13px; color:${titleColor}; margin-bottom:3px;">${haven.name}</div>
-        <div style="font-size:11px; color:${addressColor}; margin-bottom:4px;">${haven.address}</div>
-        <div style="font-size:11px; color:${timingColor}; font-weight:600; margin-bottom:5px;">⏱️ ${haven.timing}</div>
-        <div style="font-size:10.5px; color:${detailColor}; margin-bottom:8px; display:flex; flex-direction:column; gap:2.5px;">
-          ${haven.hasPhoneCharger ? '<span>🔌 Free Phone Charging Available</span>' : ''}
-          ${haven.safeWaitingArea ? '<span>🪑 Guarded Waiting Area</span>' : ''}
-          ${haven.securityStaffOnDuty ? '<span>👮 Security Staff on Duty</span>' : ''}
-        </div>
-        ${haven.contact ? `<div style="font-size:11px; margin-bottom:8px;"><a href="tel:${haven.contact.split('/')[0].trim()}" style="color:${callColor}; text-decoration:none; font-weight:600;">📞 Call: ${haven.contact}</a></div>` : ''}
       `;
 
+      marker.bindPopup(popupHtml);
+
       if (onLockSafeHaven) {
-        const divertBtn = document.createElement('button');
-        divertBtn.style.cssText = `
-          width: 100%;
-          padding: 6px 10px;
-          border-radius: 6px;
-          border: none;
-          background-color: ${isLocked ? '#059669' : '#2563eb'};
-          color: #ffffff;
-          font-size: 11px;
-          font-weight: 700;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-        `;
-        divertBtn.innerHTML = isLocked ? '✓ Currently Locked Refuge' : '🛡️ Divert Safe Route Here';
-        divertBtn.onclick = () => {
-          onLockSafeHaven(haven);
-          marker.closePopup();
-        };
-        popupDiv.appendChild(divertBtn);
+        marker.on('popupopen', () => {
+          const btn = document.getElementById(`haven-btn-${haven.id}`);
+          if (btn) {
+            btn.onclick = () => {
+              onLockSafeHaven(haven);
+              const map = mapInstanceRef.current;
+              if (map) map.closePopup();
+            };
+          }
+        });
       }
 
-      marker.bindPopup(popupDiv);
       layerGroup.addLayer(marker);
     });
-  }, [theme, isHavensVisible, havenCategoryFilter, activeLockedHavenId, onLockSafeHaven]);
+  }, [theme, onLockSafeHaven, liveHavens]);
 
-  // Render Routes and Custom Origin/Destination Markers (Enterprise Multi-Layer Navigation Architecture)
+  // Render Routes and Custom Origin/Destination Markers
   useEffect(() => {
     const routesGroup = routesLayerGroupRef.current;
     const markersGroup = markersLayerGroupRef.current;
@@ -263,120 +431,97 @@ export const MapCockpit: React.FC<Props> = ({
     routesGroup.clearLayers();
     markersGroup.clearLayers();
 
-    // 1. Draw Inactive Alternative Routes with subtle casing and refined dashed styling
+    // 1. Draw Inactive Alternative Routes with clear recommendations
     alternativeRoutes.forEach((alt) => {
-      // 1.1 Contrast Under-Casing
+      const isUnrec = alt.isRecommendedNightRoute === false;
       const altCasing = L.polyline(alt.coordinates, {
-        color: theme === 'dark' ? '#0f172a' : '#ffffff',
+        color: '#ffffff',
         weight: 6,
-        opacity: 0.85,
+        opacity: 0.8,
         lineCap: 'round',
         lineJoin: 'round'
       });
       routesGroup.addLayer(altCasing);
 
-      // 1.2 Muted Core Line
       const altPolyline = L.polyline(alt.coordinates, {
-        color: theme === 'dark' ? '#475569' : '#94a3b8',
-        weight: 3.5,
-        dashArray: '5, 8',
-        opacity: 0.75,
+        color: isUnrec ? '#ef4444' : '#64748b',
+        weight: 4,
+        dashArray: isUnrec ? '6, 8' : '5, 8',
+        opacity: 0.85,
         lineCap: 'round',
         lineJoin: 'round'
       });
       altPolyline.bindTooltip(`
         <div style="font-family:'Inter',sans-serif; font-size:12px;">
           <strong>${alt.name}</strong><br/>
+          ${isUnrec ? '<strong style="color:#ef4444;">⚠️ Not Recommended at Night</strong><br/>' : '<span style="color:#34d399;">⭐ Transit Alternative</span><br/>'}
           <span style="font-size:11px; opacity:0.8;">${alt.durationMinutes}m · Safety ${alt.safetyScore}/100</span>
         </div>
       `, { sticky: true });
       routesGroup.addLayer(altPolyline);
     });
 
-    // 2. Active Route: Multi-Layered Architecture
+    // 2. Active Route: High-Precision Smooth Curved Polyline
     if (activeRoute.coordinates.length > 1) {
-      // Layer 2.1: Soft Ambient Glow (creates refined luminous depth)
+      const isUnrecommended = activeRoute.isRecommendedNightRoute === false;
       const isHighSafety = activeRoute.safetyScore >= 70;
-      const glowColor = isHighSafety ? (theme === 'dark' ? '#10b981' : '#059669') : (theme === 'dark' ? '#f59e0b' : '#d97706');
       
+      let glowColor = '#10b981';
+      let mainColor = '#10b981';
+      if (isUnrecommended) {
+        glowColor = '#ef4444';
+        mainColor = '#ef4444';
+      } else if (!isHighSafety) {
+        glowColor = '#f59e0b';
+        mainColor = '#3b82f6';
+      }
+
+      // Glow Polyline
       const glowPolyline = L.polyline(activeRoute.coordinates, {
         color: glowColor,
-        weight: 14,
-        opacity: theme === 'dark' ? 0.22 : 0.15,
+        weight: isUnrecommended ? 14 : 16,
+        opacity: isUnrecommended ? 0.35 : 0.30,
         lineCap: 'round',
         lineJoin: 'round'
       });
       routesGroup.addLayer(glowPolyline);
 
-      // Layer 2.2: Continuous Precision Casing Line (eliminates raw segment gaps and provides razor-sharp boundary)
-      const casingColor = theme === 'dark' ? '#020617' : '#ffffff';
+      // Contrast Casing Line
       const casingPolyline = L.polyline(activeRoute.coordinates, {
-        color: casingColor,
-        weight: 8,
-        opacity: 0.96,
+        color: '#0f172a',
+        weight: 9,
+        opacity: 0.95,
         lineCap: 'round',
         lineJoin: 'round'
       });
       routesGroup.addLayer(casingPolyline);
-    }
 
-    // Layer 2.3: Segmented Precision Core Heat-Lines
-    activeRoute.segments.forEach((seg) => {
-      const score = seg.factors.compositeScore;
-      let color = theme === 'dark' ? '#10b981' : '#059669'; // safe emerald
-      let isDashed = false;
-
-      if (score < 45) {
-        color = theme === 'dark' ? '#ef4444' : '#dc2626'; // danger crimson
-        isDashed = true;
-      } else if (score < 72) {
-        color = theme === 'dark' ? '#f59e0b' : '#d97706'; // amber
-      }
-
-      const isSegmentSelected = selectedEdgeId === seg.edgeId;
-
-      if (isSegmentSelected) {
-        // Selected highlight aura
-        const selGlow = L.polyline(seg.coordinates, {
-          color: '#f59e0b',
-          weight: 14,
-          opacity: 0.6,
-          lineCap: 'round',
-          lineJoin: 'round'
-        });
-        routesGroup.addLayer(selGlow);
-      }
-
-      const polyline = L.polyline(seg.coordinates, {
-        color,
-        weight: isSegmentSelected ? 6 : 4.5,
+      // High-precision core polyline tracing all road curves
+      const corePolyline = L.polyline(activeRoute.coordinates, {
+        color: mainColor,
+        weight: 6,
         opacity: 1.0,
-        dashArray: isDashed ? '8, 8' : undefined,
+        dashArray: isUnrecommended ? '8, 8' : undefined,
         lineCap: 'round',
-        lineJoin: 'round',
-        className: isSegmentSelected ? 'route-selected' : 'route-core-active'
+        lineJoin: 'round'
       });
 
-      polyline.on('click', () => {
-        onSelectSegment(seg.edgeId);
-      });
-
-      polyline.bindTooltip(`
-        <div style="font-family:'Inter',sans-serif; min-width:150px; line-height:1.4;">
-          <strong style="font-size:12px; color:${color};">${seg.name}</strong><br/>
-          <span style="font-size:11px;">Safety Score: <strong>${score}/100</strong></span><br/>
-          <span style="font-size:11px; opacity:0.85;">Lighting: ${Math.round(seg.factors.lighting * 100)}% (${seg.illuminationSource})</span>
+      corePolyline.bindTooltip(`
+        <div style="font-family:'Inter',sans-serif; font-size:12px; line-height:1.4;">
+          <strong>${activeRoute.name}</strong><br/>
+          ${isUnrecommended ? '<strong style="color:#ef4444;">⚠️ NOT RECOMMENDED FOR NIGHT TRAVEL</strong><br/>' : '<strong style="color:#10b981;">⭐ SURAKSHIT RECOMMENDED SAFE CORRIDOR</strong><br/>'}
+          <span>Duration: <strong>${activeRoute.durationMinutes} min</strong> (${(activeRoute.distanceMeters/1000).toFixed(1)} km)</span><br/>
+          <span>Safety Score: <strong>${activeRoute.safetyScore}/100</strong></span>
         </div>
       `, { sticky: true });
+      routesGroup.addLayer(corePolyline);
+    }
 
-      routesGroup.addLayer(polyline);
-    });
-
-    // 2.4 Admin Role: Highlight Municipal Dark Spots in neon crimson with warning tags
+    // Admin Role: Highlight Municipal Dark Spots
     if (userRole === 'admin') {
       PUNE_DARK_SPOTS.forEach((spot) => {
         const darkPolyline = L.polyline(spot.coordinates, {
-          color: theme === 'dark' ? '#ef4444' : '#dc2626',
+          color: '#ef4444',
           weight: 7,
           opacity: 0.95,
           dashArray: '4, 6',
@@ -393,12 +538,12 @@ export const MapCockpit: React.FC<Props> = ({
       });
     }
 
-    // 2.5 Guardian Role: Draw transparent 50m safe corridor geofence buffer around active path
-    if (userRole === 'guardian' && activeRoute.coordinates.length > 0) {
+    // Draw 50m safe corridor geofence buffer
+    if ((isNavigating || isLiveNavigating || isSimulating) && activeRoute.coordinates.length > 0) {
       const bufferPolyline = L.polyline(activeRoute.coordinates, {
         color: '#10b981',
         weight: 26,
-        opacity: 0.15,
+        opacity: 0.18,
         lineCap: 'round',
         lineJoin: 'round'
       });
@@ -406,12 +551,12 @@ export const MapCockpit: React.FC<Props> = ({
       routesGroup.addLayer(bufferPolyline);
     }
 
-    // 3. Modern Radar Origin Marker (A)
+    // Modern Origin Marker (A)
     const originIcon = L.divIcon({
       className: 'pro-marker-origin',
       html: `
         <div style="position:relative; width:34px; height:34px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(16,185,129,0.25); animation:proPulse 2.2s infinite;"></div>
+          <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(16,185,129,0.3); animation:proPulse 2.2s infinite;"></div>
           <div style="position:relative; background:#10b981; border:2.5px solid #ffffff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:11px; font-weight:800; box-shadow:0 3px 10px rgba(0,0,0,0.35);">
             A
           </div>
@@ -428,12 +573,12 @@ export const MapCockpit: React.FC<Props> = ({
     `);
     markersGroup.addLayer(originMarker);
 
-    // 4. Modern Destination Beacon Marker (B)
+    // Modern Destination Marker (B)
     const destIcon = L.divIcon({
       className: 'pro-marker-dest',
       html: `
         <div style="position:relative; width:34px; height:34px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(245,158,11,0.25); animation:proPulse 2.2s infinite;"></div>
+          <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(245,158,11,0.3); animation:proPulse 2.2s infinite;"></div>
           <div style="position:relative; background:#f59e0b; border:2.5px solid #ffffff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:#000000; font-size:11px; font-weight:800; box-shadow:0 3px 10px rgba(0,0,0,0.35);">
             B
           </div>
@@ -450,12 +595,19 @@ export const MapCockpit: React.FC<Props> = ({
     `);
     markersGroup.addLayer(destMarker);
 
-    // Fit map bounds to active route or markers
-    if (activeRoute.coordinates.length > 0) {
+    // Fit map bounds cleanly to active route when NOT in close-up navigation mode
+    if (activeRoute.coordinates.length > 0 && !isNavigating) {
       const bounds = L.latLngBounds([origin.coordinates, destination.coordinates, ...activeRoute.coordinates]);
-      map.fitBounds(bounds, { padding: [60, 60] });
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
     }
-  }, [userRole, origin, destination, activeRoute, alternativeRoutes, selectedEdgeId, onSelectSegment, theme]);
+  }, [userRole, origin, destination, activeRoute, alternativeRoutes, selectedEdgeId, onSelectSegment, theme, isNavigating]);
+
+  // Clean maneuver layer (turn arrow markers removed per user preference for uncluttered route line)
+  useEffect(() => {
+    const layerGroup = maneuversLayerGroupRef.current;
+    if (!layerGroup) return;
+    layerGroup.clearLayers();
+  }, [activeRoute]);
 
   // Render Dynamic Event Markers
   useEffect(() => {
@@ -467,19 +619,20 @@ export const MapCockpit: React.FC<Props> = ({
     activeEvents.forEach((ev) => {
       if (!ev.active) return;
 
+      const isClosure = ev.type === 'road_closure';
       const eventIcon = L.divIcon({
         className: 'event-marker',
-        html: `<div style="background:#ef4444; border:2px solid #fff; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; animation:pulse-ring 1.2s infinite;">⚠️</div>`,
+        html: `<div style="background:${isClosure ? '#ea580c' : '#ef4444'}; border:2px solid #fff; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); animation:pulse-ring 1.4s infinite;">${isClosure ? '🚧' : '⚠️'}</div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16]
       });
 
       const marker = L.marker(ev.coordinates, { icon: eventIcon });
       marker.bindPopup(`
-        <div style="font-family:'Inter',sans-serif; color:#111; font-size:12px;">
-          <strong style="color:#ef4444; font-size:13px;">${ev.title}</strong><br/>
-          <span>${ev.description}</span><br/>
-          <span style="color:#b91c1c; font-weight:600;">Status: Active Hazard Injection</span>
+        <div style="font-family:'Inter',sans-serif; color:#111; font-size:12px; min-width:200px;">
+          <strong style="color:${isClosure ? '#c2410c' : '#ef4444'}; font-size:13px;">${ev.title}</strong><br/>
+          <span style="display:block; margin:4px 0;">${ev.description}</span>
+          <span style="color:${isClosure ? '#9a3412' : '#b91c1c'}; font-weight:700; font-size:11px;">Status: ${isClosure ? 'Active Construction / Road Closure' : 'Active Hazard Alert'}</span>
         </div>
       `);
       layerGroup.addLayer(marker);
@@ -487,37 +640,49 @@ export const MapCockpit: React.FC<Props> = ({
 
     // Render Citizen Community Reports
     citizenReports.forEach((rep) => {
-      const repIcon = L.divIcon({
-        className: 'citizen-report-marker',
-        html: `<div style="background:#f59e0b; border:2px solid #fff; border-radius:50%; width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:#000; font-size:13px; box-shadow:0 0 8px #f59e0b;">📢</div>`,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13]
+      const reportIcon = L.divIcon({
+        className: 'citizen-report-pin',
+        html: `
+          <div style="background:#f59e0b; border:2px solid #fff; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:0 3px 8px rgba(0,0,0,0.4); animation:bounce 2s infinite;">
+            📢
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
       });
 
-      const marker = L.marker(rep.coordinates, { icon: repIcon });
+      const marker = L.marker(rep.coordinates, { icon: reportIcon });
       marker.bindPopup(`
-        <div style="font-family:'Inter',sans-serif; color:#111; font-size:12px;">
-          <strong style="color:#b45309; font-size:13px;">[Citizen Audit] ${rep.title}</strong><br/>
-          <span>${rep.description}</span><br/>
-          <span style="color:#78350f; font-weight:600;">Urgency: ${rep.urgency.toUpperCase()} · Verified Community Post</span>
+        <div style="font-family:'Inter',sans-serif; min-width:200px; max-width:250px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span style="font-size:9px; font-weight:800; color:#b45309; text-transform:uppercase; background:rgba(245,158,11,0.15); padding:2px 5px; border-radius:4px;">Community Hazard</span>
+            <span style="font-size:9px; font-weight:800; color:${rep.urgency === 'high' ? '#ef4444' : '#f59e0b'}; text-transform:uppercase;">${rep.urgency}</span>
+          </div>
+          <div style="font-weight:700; font-size:12px; margin:2px 0; color:#0f172a;">${rep.title}</div>
+          <div style="font-size:11px; color:#475569; margin-bottom:6px;">${rep.description}</div>
+          ${rep.aiRiskScore ? `<div style="font-size:10px; color:#b45309; font-weight:700; margin-bottom:4px;">🛡️ AI Risk: ${rep.aiRiskScore}/100</div>` : ''}
+          ${rep.photoUrl ? `<div style="margin:4px 0;"><img src="${rep.photoUrl}" style="width:100%; height:90px; object-fit:cover; border-radius:4px;" alt="Evidence" /></div>` : ''}
+          <div style="font-size:10px; color:#64748b; border-top:1px solid #e2e8f0; padding-top:4px;">
+            Near: <strong>${rep.landmarkName}</strong>
+          </div>
         </div>
       `);
       layerGroup.addLayer(marker);
     });
   }, [activeEvents, citizenReports]);
 
-  // Render Live Commuter Marker
+  // Update Commuter Animated Position Marker
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
     if (!commuterMarkerRef.current) {
       const commuterIcon = L.divIcon({
-        className: 'commuter-marker',
+        className: 'commuter-live-marker',
         html: `
           <div style="position:relative; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
-            <div style="position:absolute; width:28px; height:28px; border-radius:50%; background:rgba(245,158,11,0.35); animation:proPulse 1.8s infinite;"></div>
-            <div style="position:relative; width:16px; height:16px; border-radius:50%; background:#f59e0b; border:2.5px solid #ffffff; box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
+            <div style="position:absolute; width:28px; height:28px; border-radius:50%; background:rgba(59,130,246,0.35); animation:pulse-ring 1.8s infinite;"></div>
+            <div style="width:16px; height:16px; border-radius:50%; background:#2563eb; border:2.5px solid #ffffff; box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>
           </div>
         `,
         iconSize: [28, 28],
@@ -529,6 +694,39 @@ export const MapCockpit: React.FC<Props> = ({
       commuterMarkerRef.current.setLatLng(telemetry.currentPosition);
     }
   }, [telemetry.currentPosition]);
+
+  // Synchronize active turn maneuver with commuter's live movement
+  useEffect(() => {
+    if (!activeRoute.maneuvers || activeRoute.maneuvers.length === 0) return;
+    const curPos = telemetry.currentPosition;
+    let closestIdx = 0;
+    let minD = Infinity;
+
+    for (let i = 0; i < activeRoute.maneuvers.length; i++) {
+      const m = activeRoute.maneuvers[i];
+      const dLat = (m.coordinates[0] - curPos[0]) * 111000;
+      const dLng = (m.coordinates[1] - curPos[1]) * 105000;
+      const distSq = dLat * dLat + dLng * dLng;
+
+      if (distSq < minD) {
+        minD = distSq;
+        closestIdx = i;
+      }
+    }
+
+    setActiveManeuverIndex(closestIdx);
+  }, [telemetry.currentPosition, activeRoute.maneuvers]);
+
+  const handleRecenter = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (activeRoute.coordinates.length > 0) {
+      const bounds = L.latLngBounds([origin.coordinates, destination.coordinates, ...activeRoute.coordinates]);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    } else {
+      map.setView([18.5500, 73.8100], 12);
+    }
+  };
 
   return (
     <div className="map-viewport" style={{ cursor: isPickingOnMap ? 'crosshair' : 'default' }}>
@@ -553,13 +751,18 @@ export const MapCockpit: React.FC<Props> = ({
           <span>Click anywhere on the map to set {isPickingOnMap.toUpperCase()} location</span>
         </div>
       )}
-      {/* Floating Zero-Watermark Tile Style Dropdown */}
-      <div style={{
+
+      {/* Floating Google Maps Style Cartography & Layer Controller */}
+      <div className="map-floating-layer-controls" style={{
         position: 'absolute',
-        bottom: '16px',
+        bottom: '20px',
         left: '16px',
-        zIndex: 1000
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
       }}>
+        {/* Layer Switcher Button */}
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setIsLayerMenuOpen(!isLayerMenuOpen)}
@@ -568,70 +771,81 @@ export const MapCockpit: React.FC<Props> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '6px 12px',
+              padding: '8px 14px',
               backgroundColor: 'var(--surface-elevated)',
-              backdropFilter: 'blur(10px)',
+              backdropFilter: 'blur(12px)',
               border: '1px solid var(--border-subtle)',
               borderRadius: '8px',
               fontSize: '11px',
-              fontWeight: 600,
+              fontWeight: 700,
               color: 'var(--text-primary)',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
               cursor: 'pointer'
             }}
-            title="Switch Map Tile Cartography"
+            title="Switch Map Layers and Boundaries"
           >
-            <Layers size={13} color="var(--accent-amber)" />
-            <span>{mapStyle === 'night' ? '🌙 Night Radar' : mapStyle === 'satellite' ? '🛰️ Satellite' : '🏙️ Streets'}</span>
-            <ChevronDown size={12} style={{ transform: isLayerMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
+            <Layers size={14} color="var(--accent-amber)" />
+            <span>
+              {mapStyle === 'google_roads' ? '🗺️ Google Maps' : mapStyle === 'google_hybrid' ? '🛰️ Google Hybrid' : mapStyle === 'google_terrain' ? '⛰️ Google Terrain' : '🌐 OpenStreetMap'}
+            </span>
+            <ChevronDown size={13} style={{ transform: isLayerMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
           </button>
 
           {isLayerMenuOpen && (
-            <div style={{
-              position: 'absolute',
-              bottom: 'calc(100% + 6px)',
-              left: '0',
-              width: '190px',
-              backgroundColor: 'var(--surface-elevated)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '8px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-              padding: '4px',
-              zIndex: 2000,
-              animation: 'fadeIn 0.15s ease-out'
-            }}>
+            <div
+              className="map-layer-dropdown-menu"
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 8px)',
+                left: '0',
+                width: '230px',
+                backgroundColor: 'var(--surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '10px',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.4)',
+                padding: '6px',
+                zIndex: 2000,
+                animation: 'fadeIn 0.15s ease-out'
+              }}
+            >
+              {/* Tile Provider Section */}
               <div style={{
                 padding: '4px 8px',
                 fontSize: '10px',
-                fontWeight: 700,
+                fontWeight: 800,
                 textTransform: 'uppercase',
                 color: 'var(--text-muted)',
                 borderBottom: '1px solid var(--border-subtle)',
-                marginBottom: '2px'
+                marginBottom: '4px'
               }}>
-                Map Style
+                Google Maps Cartography
               </div>
               {[
-                { id: 'night', label: '🌙 Night Vision Radar', desc: 'Nocturnal contrast' },
-                { id: 'streets', label: '🏙️ Daylight Streets', desc: 'Clean OpenStreetMap' },
-                { id: 'satellite', label: '🛰️ Satellite Imagery', desc: 'High-res Esri World' }
+                { id: 'carto_dark', label: '🌙 CARTO Dark Matter', desc: 'Nocturnal safe-routing high-contrast dark tiles' },
+                { id: 'carto_voyager', label: '🧭 CARTO Voyager', desc: 'Modern high-legibility street cartography' },
+                { id: 'google_roads', label: '🗺️ Google Maps Roadmap', desc: 'Standard streets, boundaries & names' },
+                { id: 'google_hybrid', label: '🛰️ Google Satellite Hybrid', desc: 'Photographic imagery + road labels' },
+                { id: 'google_terrain', label: '⛰️ Google Physical Terrain', desc: 'Topographic contours & elevations' },
+                { id: 'osm', label: '🌐 OpenStreetMap Classic', desc: 'Open crowdsourced vector tiles' }
               ].map(opt => (
                 <div
                   key={opt.id}
                   onClick={() => {
-                    setMapStyle(opt.id as any);
+                    setMapStyle(opt.id as MapTileStyle);
                     setIsLayerMenuOpen(false);
                   }}
                   style={{
-                    padding: '6px 8px',
-                    borderRadius: '5px',
+                    padding: '7px 8px',
+                    borderRadius: '6px',
                     cursor: 'pointer',
                     fontSize: '11px',
-                    fontWeight: mapStyle === opt.id ? 700 : 500,
+                    fontWeight: mapStyle === opt.id ? 800 : 500,
                     color: mapStyle === opt.id ? 'var(--accent-amber)' : 'var(--text-primary)',
                     backgroundColor: mapStyle === opt.id ? 'var(--surface-hover)' : 'transparent',
                     display: 'flex',
-                    flexDirection: 'column'
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '2px'
                   }}
                   onMouseEnter={e => {
                     if (mapStyle !== opt.id) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-hover)';
@@ -640,95 +854,189 @@ export const MapCockpit: React.FC<Props> = ({
                     if (mapStyle !== opt.id) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
                   }}
                 >
-                  <span>{opt.label}</span>
-                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{opt.desc}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span>{opt.label}</span>
+                    <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{opt.desc}</span>
+                  </div>
+                  {mapStyle === opt.id && <Check size={14} color="var(--accent-amber)" />}
                 </div>
               ))}
 
+              {/* Administrative Overlay Toggles */}
               <div style={{
                 padding: '6px 8px 4px',
                 fontSize: '10px',
-                fontWeight: 700,
+                fontWeight: 800,
                 textTransform: 'uppercase',
                 color: 'var(--text-muted)',
                 borderTop: '1px solid var(--border-subtle)',
                 marginTop: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
+                marginBottom: '4px'
               }}>
-                <span>Safe Havens</span>
-                <input
-                  type="checkbox"
-                  checked={isHavensVisible}
-                  onChange={(e) => setIsHavensVisible(e.target.checked)}
-                  style={{ cursor: 'pointer', accentColor: 'var(--accent-safety, #10b981)' }}
-                />
+                Administrative Overlays
               </div>
 
-              {isHavensVisible && (
-                <div style={{ padding: '2px 4px 4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  {[
-                    { id: 'all', label: 'All 20 Havens' },
-                    { id: 'police', label: 'Pink Chowkis & Police' },
-                    { id: 'pharmacy_247', label: '24/7 Pharmacies' },
-                    { id: 'hospital', label: 'Emergency Hospitals' },
-                    { id: 'commercial_refuge', label: 'Commercial Refuges' },
-                    { id: 'transit_hub', label: 'Transit Depots & Metro' }
-                  ].map(cat => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setHavenCategoryFilter(cat.id as any)}
-                      style={{
-                        padding: '3px 6px',
-                        borderRadius: '4px',
-                        border: 'none',
-                        textAlign: 'left',
-                        fontSize: '9.5px',
-                        fontWeight: havenCategoryFilter === cat.id ? 700 : 500,
-                        backgroundColor: havenCategoryFilter === cat.id ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                        color: havenCategoryFilter === cat.id ? '#60a5fa' : 'var(--text-secondary, #94a3b8)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Toggle State & District Boundaries */}
+              <div
+                onClick={() => setShowBoundaries(!showBoundaries)}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <span>State & District Outlines</span>
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: showBoundaries ? 'rgba(16, 185, 129, 0.2)' : 'rgba(100, 116, 139, 0.2)',
+                  color: showBoundaries ? 'var(--safe-emerald)' : 'var(--text-muted)'
+                }}>
+                  {showBoundaries ? 'ON' : 'OFF'}
+                </span>
+              </div>
 
-              {onOpenRefugesModal && (
-                <button
-                  onClick={() => {
-                    setIsLayerMenuOpen(false);
-                    onOpenRefugesModal();
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '5px 8px',
-                    marginTop: '4px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(59, 130, 246, 0.3)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    color: '#93c5fd',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  🏢 Haven Directory
-                </button>
-              )}
+              {/* Toggle City & District Badges */}
+              <div
+                onClick={() => setShowCityLabels(!showCityLabels)}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <span>City & District Badges</span>
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: showCityLabels ? 'rgba(16, 185, 129, 0.2)' : 'rgba(100, 116, 139, 0.2)',
+                  color: showCityLabels ? 'var(--safe-emerald)' : 'var(--text-muted)'
+                }}>
+                  {showCityLabels ? 'ON' : 'OFF'}
+                </span>
+              </div>
             </div>
           )}
         </div>
+
+        {/* Quick Re-center Button */}
+        <button
+          onClick={handleRecenter}
+          className="btn-civic"
+          style={{
+            padding: '8px 12px',
+            backgroundColor: 'var(--surface-elevated)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            cursor: 'pointer'
+          }}
+          title="Re-center map on Pune Safe Corridor"
+        >
+          <Compass size={13} color="var(--safe-emerald)" />
+          <span>{currentLanguage === 'mr' ? 'पुणे कॉरिडॉर' : currentLanguage === 'hi' ? 'पुणे कॉरिडोर' : 'Pune Corridor'}</span>
+        </button>
       </div>
+
+      {/* Google Maps Floating "Start Navigation" Button */}
+      {!isNavigating && activeRoute.coordinates.length > 1 && (
+        <div
+          className="map-floating-start-nav"
+          style={{
+            position: 'absolute',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <button
+            onClick={handleStartNavigation}
+            className="btn-civic"
+            style={{
+              backgroundColor: activeRoute.isRecommendedNightRoute === false ? '#dc2626' : '#059669',
+              color: '#ffffff',
+              padding: '12px 24px',
+              borderRadius: '9999px',
+              fontSize: '14px',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: activeRoute.isRecommendedNightRoute === false 
+                ? '0 8px 30px rgba(220, 38, 38, 0.55), 0 4px 12px rgba(0,0,0,0.4)'
+                : '0 8px 30px rgba(5, 150, 105, 0.55), 0 4px 12px rgba(0,0,0,0.4)',
+              border: '2px solid rgba(255, 255, 255, 0.4)',
+              cursor: 'pointer',
+              transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
+            <Navigation size={18} style={{ transform: 'rotate(45deg)' }} />
+            <span>{t.startNavigation}</span>
+            <span
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700
+              }}
+            >
+              {activeRoute.durationMinutes} {t.minutes}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* When in Navigation mode, render NavigationCockpitHud */}
+      {isNavigating && (
+        <NavigationCockpitHud
+          route={activeRoute}
+          activeManeuverIndex={activeManeuverIndex}
+          onSelectManeuver={(idx) => {
+            setActiveManeuverIndex(idx);
+            zoomToManeuver(idx);
+          }}
+          onExitNavigation={() => {
+            setIsNavigating(false);
+            onToggleLiveNavigation?.(false);
+            handleRecenter();
+          }}
+          isSimulating={isSimulating || false}
+          onToggleSimulation={onToggleSimulation || (() => {})}
+          onRecenterCloseUp={() => zoomToManeuver(activeManeuverIndex)}
+          travelProfile={travelProfile || 'pedestrian'}
+        />
+      )}
 
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
     </div>
   );
 };
+
+export default MapCockpit;

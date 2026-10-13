@@ -10,3 +10,4 @@ api/surakshit_local.db
 android/local.properties
 .gradle/
 *.apk
+scratch/

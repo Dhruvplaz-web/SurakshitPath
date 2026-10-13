@@ -2,7 +2,8 @@ import { SafeHaven, CitizenReport, SafeHavenType } from '../types/routing';
 import { PUNE_SAFE_HAVENS } from '../data/safeHavens';
 import { PUNE_DARK_SPOTS } from '../data/civicAdminData';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE = (import.meta as any).env?.VITE_API_URL || 
+  (typeof window !== 'undefined' && window.location.origin ? `${window.location.origin}/api` : 'http://localhost:8000/api');
 
 export interface ScadaFeederTelemetry {
   feederId: string;

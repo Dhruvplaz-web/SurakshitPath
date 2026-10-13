@@ -48,11 +48,42 @@ export interface SegmentDetail {
   keySafetyNotes: string[];
 }
 
+export type TravelProfile = 'pedestrian' | 'two_wheeler' | 'four_wheeler' | 'transit';
+
+export type ManeuverType = 
+  | 'depart'
+  | 'turn'
+  | 'roundabout'
+  | 'straight'
+  | 'fork'
+  | 'merge'
+  | 'on ramp'
+  | 'off ramp'
+  | 'uturn'
+  | 'arrive';
+
+export interface RouteManeuver {
+  id: string;
+  type: ManeuverType;
+  modifier?: 'left' | 'right' | 'slight left' | 'slight right' | 'sharp left' | 'sharp right' | 'straight' | 'uturn';
+  instruction: string;
+  roadName: string;
+  coordinates: [number, number]; // [lat, lng]
+  distanceMeters: number;
+  durationSeconds: number;
+  safetyScore: number; // 0-100
+  lightingLux: number; // 0 to 60+ lx
+  isRecommended: boolean;
+  warningAlert?: string;
+  bearing?: number; // 0 to 360 degrees
+}
+
 export interface RouteOption {
   id: string;
   name: string;
   tagline: string;
   routeType: 'fastest' | 'safe' | 'balanced';
+  travelProfile?: TravelProfile;
   distanceMeters: number;
   durationMinutes: number;
   safetyScore: number; // 0-100
@@ -61,9 +92,24 @@ export interface RouteOption {
   coordinates: [number, number][];
   segments: SegmentDetail[];
   reasons: string[];
+  maneuvers?: RouteManeuver[];
+  isRecommendedNightRoute?: boolean;
+  warningNotice?: string;
 }
 
-export type SafeHavenType = 'police' | 'pharmacy_247' | 'hospital' | 'transit_hub' | 'commercial_refuge';
+export type SafeHavenType =
+  | 'police'
+  | 'pharmacy'
+  | 'pharmacy_247'
+  | 'hospital'
+  | 'transit_hub'
+  | 'commercial_refuge'
+  | 'women_shelter'
+  | 'crisis_shelter'
+  | 'community_sanctuary'
+  | 'temple_sanctuary'
+  | 'helpline_centre'
+  | 'supermart_247';
 
 export interface SafeHaven {
   id: string;
@@ -73,6 +119,9 @@ export interface SafeHaven {
   address: string;
   timing: string;
   contact?: string;
+  trustScore?: number;
+  verifiedBy?: string;
+  facilities?: string[];
   is24x7?: boolean;
   askForAngelaTrained?: boolean;
   hasPhoneCharger?: boolean;
@@ -120,7 +169,8 @@ export type AppLanguage = 'en' | 'mr' | 'hi';
 
 export interface CitizenReport {
   id: string;
-  category: 'broken_lamp' | 'deserted_stretch' | 'harassment_crowd' | 'cctv_blindspot' | 'pothole_hazard';
+  category: 'broken_lamp' | 'deserted_stretch' | 'harassment_crowd' | 'cctv_blindspot' | 'pothole_hazard' | 'other';
+  otherCategoryDetail?: string;
   title: string;
   description: string;
   coordinates: [number, number];
@@ -130,6 +180,9 @@ export interface CitizenReport {
   urgency: 'high' | 'medium' | 'low';
   landmarkName: string;
   photoUrl?: string;
+  audioNote?: string;
+  aiRiskScore?: number;
+  aiRiskRationale?: string;
 }
 
 export interface VolunteerAlert {
@@ -176,5 +229,112 @@ export interface GuardianSession {
   lastPingTime: string;
   activeRouteName: string;
   guardianPhone: string;
+}
+
+export interface MunicipalRoadProject {
+  id: string;
+  name: string;
+  ward: string;
+  status: 'planning' | 'in_progress' | 'tender_floated' | 'completed';
+  budgetINR: string;
+  completionPercent: number;
+  contractor: string;
+  roadQualityIndex: number; // 0-100 Pavement Condition Index
+  targetDate: string;
+  edgeId: string;
+  coordinates: [number, number][];
+}
+
+export interface CrimeProneZone {
+  id: string;
+  zoneName: string;
+  ward: string;
+  policeChowki: string;
+  riskLevel: 'critical' | 'high' | 'moderate';
+  incidentTypes: string[];
+  pastIncidents30d: number;
+  patrolFrequency: string;
+  safetyAction: string;
+  coordinates: [number, number][];
+  edgeId: string;
+}
+
+// ----------------------------------------------------------------------------
+// RIDE SHIELD TYPES (Provider Abstraction, Sessions, Redirection, Monitoring)
+// ----------------------------------------------------------------------------
+
+export type RideProviderId = 'uber' | 'ola' | 'rapido' | 'generic';
+
+export type RideSessionStatus =
+  | 'initiated'
+  | 'provider_redirected'
+  | 'monitoring_started'
+  | 'completed'
+  | 'cancelled';
+
+export interface RideProviderInfo {
+  id: RideProviderId;
+  name: string;
+  logo: string;
+  tagline: string;
+  description: string;
+  deepLinkSupported: boolean;
+  supportedParameters: string[];
+  isConfigured: boolean;
+  notice: string;
+  brandColor: string;
+  webUrl: string;
+  appScheme?: string;
+}
+
+export interface RideLinkParams {
+  pickupCoords: [number, number];
+  pickupName: string;
+  destCoords: [number, number];
+  destName: string;
+  routeId?: string;
+  routeName?: string;
+  safetyScore?: number;
+}
+
+export interface RideProviderRedirectResult {
+  providerId: RideProviderId;
+  providerName: string;
+  universalUrl: string;
+  deepLinkUrl: string;
+  fallbackUrl: string;
+  parametersPassed: {
+    pickupLat: number;
+    pickupLng: number;
+    pickupName: string;
+    destLat: number;
+    destLng: number;
+    destName: string;
+  };
+  instructions: string;
+  disclaimer: string;
+}
+
+export interface RideSession {
+  ride_id: string;
+  user_id: string;
+  route_id: string;
+  route_name: string;
+  provider: RideProviderId;
+  pickup_lat: number;
+  pickup_lng: number;
+  destination_lat: number;
+  destination_lng: number;
+  pickup_name: string;
+  destination_name: string;
+  started_at: number;
+  provider_redirected_at?: number;
+  monitoring_enabled: boolean;
+  monitoring_started_at?: number;
+  status: RideSessionStatus;
+  vehicle_number?: string;
+  driver_name?: string;
+  notes?: string;
+  safety_score?: number;
 }
 

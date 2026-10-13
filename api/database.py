@@ -116,6 +116,7 @@ def init_database():
 
 def seed_safe_havens(cursor):
     havens = [
+        # Pune PMRDA
         ("haven_hinjawadi_police", "Hinjawadi Police Station", "police", "Phase 1, Hinjawadi Rajiv Gandhi Infotech Park, Pune", "24 Hours Open", "020-22934200 / 112", 18.5910, 73.7380, 1, 1, 1, 1, "Pune City Police · 24/7 Division HQ"),
         ("haven_wakad_chowki", "Wakad Police Chowki", "police", "Dange Chowk Road, Wakad, Pimpri-Chinchwad", "24 Hours Open", "020-27278100 / 112", 18.5985, 73.7745, 1, 1, 1, 1, "PCMC Police Commissionerate"),
         ("haven_baner_chowki", "Baner Police Outpost", "police", "Baner Road, Near Sakal Nagar, Pune", "24 Hours Open", "020-25654100 / 112", 18.5590, 73.7925, 1, 1, 1, 1, "Pune City Police · Pink Security Chowki"),
@@ -135,7 +136,29 @@ def seed_safe_havens(cursor):
         ("haven_ioc_pashan", "Indian Oil 24/7 Swagat Plaza Pashan", "commercial_refuge", "Pashan-Sus Road Junction, Pashan, Pune", "24 Hours Open", "020-25895566", 18.5390, 73.7910, 1, 1, 1, 1, "IOCL 24/7 Illuminated Refuge"),
         ("haven_balewadi_metro", "Balewadi Phata Metro Station Refuge", "transit_hub", "Pune Metro Line 3 Concourse, Baner-Balewadi Road", "06:00 - 00:30 · 24/7 CISF Security Desk", "020-26051100", 18.5710, 73.7820, 1, 1, 1, 1, "Pune Metro Rail Corporation / CISF Outpost"),
         ("haven_kothrud_stand", "PMPML Kothrud Depot Control Hub", "transit_hub", "Paud Road, Near Chandani Chowk, Kothrud, Pune", "24 Hours Operational Control", "020-24503355", 18.5060, 73.8080, 1, 1, 1, 1, "PMPML Transit Command Center"),
-        ("haven_shimla_office_shivajinagar", "Shivajinagar Metro & Police Nexus", "transit_hub", "Old Pune-Mumbai Highway, Shivajinagar, Pune", "24 Hours Guarded Interchange", "020-25531200 / 112", 18.5310, 73.8510, 1, 1, 1, 1, "Integrated Multi-Modal Transit Nexus")
+        ("haven_shimla_office_shivajinagar", "Shivajinagar Metro & Police Nexus", "transit_hub", "Old Pune-Mumbai Highway, Shivajinagar, Pune", "24 Hours Guarded Interchange", "020-25531200 / 112", 18.5310, 73.8510, 1, 1, 1, 1, "Integrated Multi-Modal Transit Nexus"),
+        
+        # Mumbai MMR
+        ("haven_police_marine_drive", "Marine Drive Police Station & Coastal Patrol", "police", "Netaji Subhash Chandra Bose Road, Nariman Point, Mumbai", "24/7 Active Outpost", "022-22812200 / 112", 18.9280, 72.8250, 1, 1, 1, 1, "Mumbai Police · South Region HQ"),
+        ("haven_police_bandra", "Bandra Police Station & Nirbhaya Cell", "police", "Hill Road, Near Bandra Station, Bandra West, Mumbai", "24/7 Nirbhaya Squad", "022-26423023 / 112", 19.0550, 72.8350, 1, 1, 1, 1, "Mumbai Police · Nirbhaya Cell"),
+        ("haven_hospital_lilavati_mumbai", "Lilavati Hospital 24/7 Emergency Trauma", "hospital", "A-791, Bandra Reclamation, Bandra West, Mumbai", "24 Hours Emergency Bay", "022-26751000", 19.0515, 72.8290, 1, 1, 1, 1, "NABH Accredited Apex Hospital"),
+        ("haven_police_navi_mumbai_vashi", "Vashi Police Station & Women Helpline", "police", "Sector 17, Vashi, Navi Mumbai, Maharashtra", "24/7 Police Outpost", "022-27891100 / 112", 19.0760, 72.9990, 1, 1, 1, 1, "Navi Mumbai Police Commissionerate"),
+        ("haven_police_thane_west", "Thane Central Police Station", "police", "Near Thane Court, Gokhale Road, Thane West", "24/7 Guarded Outpost", "022-25344444 / 112", 19.1950, 72.9780, 1, 1, 1, 1, "Thane City Police Verified"),
+        
+        # North Maharashtra (Nashik)
+        ("haven_police_nashik_panchavati", "Panchavati Police Station", "police", "Dindori Road, Panchavati, Nashik, Maharashtra", "24/7 Active Outpost", "0253-2512333 / 112", 20.0050, 73.7950, 1, 1, 1, 1, "Nashik Police Verified"),
+        ("haven_hospital_apollo_nashik", "Apollo Hospital 24/7 Emergency Center", "hospital", "Mumbai-Agra Highway, Dwarka Circle, Nashik", "24 Hours Trauma Care", "0253-2303000", 19.9880, 73.7740, 1, 1, 1, 1, "Apollo 24/7 Verified Safe Refuge"),
+        
+        # Marathwada (Chhatrapati Sambhaji Nagar)
+        ("haven_police_sambhaji_kranti_chowk", "Kranti Chowk Police Station & Women Helpdesk", "police", "Jalna Road, Kranti Chowk, Chhatrapati Sambhaji Nagar", "24/7 Central Outpost", "0240-2331100 / 112", 19.8730, 75.3280, 1, 1, 1, 1, "Sambhaji Nagar Police Verified"),
+        
+        # Vidarbha (Nagpur)
+        ("haven_police_nagpur_sitabuldi", "Sitabuldi Police Station (Zero Mile Central)", "police", "Wardha Road, Sitabuldi, Nagpur, Maharashtra", "24/7 Active Outpost", "0712-2565555 / 112", 21.1460, 79.0820, 1, 1, 1, 1, "Nagpur Police Central Wing"),
+        ("haven_hospital_aiims_nagpur", "AIIMS Nagpur 24/7 Emergency Trauma Bay", "hospital", "Sector 20, MIHAN SEZ, South Nagpur", "24 Hours Emergency Refuge", "0712-2352000", 21.0500, 79.0350, 1, 1, 1, 1, "National Apex Healthcare Institute"),
+        
+        # Western Maharashtra (Kolhapur & Solapur)
+        ("haven_police_kolhapur_cbs", "CBS Police Chowki & Women Assistance Desk", "police", "Central Bus Stand, Station Road, Kolhapur", "24/7 Transit Police Chowki", "0231-2651100 / 112", 16.6960, 74.2250, 1, 1, 1, 1, "Kolhapur Police Verified"),
+        ("haven_police_solapur_pune_naka", "Old Pune Naka Police Station", "police", "Pune-Solapur Highway Junction, Solapur", "24/7 Highway Police Checkpoint", "0217-2744100 / 112", 17.6650, 75.9010, 1, 1, 1, 1, "Solapur Police Verified")
     ]
     cursor.executemany("""
     INSERT INTO safe_havens (id, name, type, address, timing, contact, lat, lon, ask_for_angela_trained, has_phone_charger, safe_waiting_area, security_staff_on_duty, accreditation_badge)
@@ -147,7 +170,10 @@ def seed_dark_spots(cursor):
         ("ds_sus_underpass", "Sus Road Unlit Highway Underpass", "Pune", 0.88, 1.20, "open", 14, 18.5408, 73.7712),
         ("ds_service_lane_wakad", "Wakad NH-48 Service Lane Dead Zone", "Pune", 0.74, 2.80, "open", 9, 18.6015, 73.7622),
         ("ds_pashan_isolated_alley", "Pashan Tekdi Isolated Periphery", "Pune", 0.92, 0.40, "open", 22, 18.5342, 73.7915),
-        ("ds_mula_river_bridge_blindspot", "Mula River Bridge Unlit Service Arc", "Pune", 0.68, 3.50, "open", 6, 18.5721, 73.7995)
+        ("ds_mula_river_bridge_blindspot", "Mula River Bridge Unlit Service Arc", "Pune", 0.68, 3.50, "open", 6, 18.5721, 73.7995),
+        ("ds_mumbai_mankhurd_underpass", "Mankhurd Vashi Link Unlit Underpass", "Mumbai", 0.85, 1.50, "open", 11, 19.0550, 72.9320),
+        ("ds_nagpur_hingna_ringroad", "Outer Ring Road Hingna Freight Junction", "Nagpur", 0.79, 2.10, "open", 8, 21.0800, 78.9800),
+        ("ds_nashik_dwarka_highway_cut", "Dwarka Highway Truck Terminal Cut", "Nashik", 0.82, 1.90, "open", 12, 19.9800, 73.7900)
     ]
     cursor.executemany("""
     INSERT INTO civic_dark_spots (id, name, district, severity, lux_level, status, reported_count, lat, lon)

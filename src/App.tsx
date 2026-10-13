@@ -1,33 +1,44 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useAuth } from './context/AuthContext';
 import { Header } from './components/Common/Header';
 import { ErrorBoundary } from './components/Common/ErrorBoundary';
 import { RouteComparisonCard } from './components/Sidebar/RouteComparisonCard';
+import { RideShieldCard } from './components/Sidebar/RideShieldCard';
 import { SafetySlider } from './components/Sidebar/SafetySlider';
-import { ExplainabilityRadar } from './components/Sidebar/ExplainabilityRadar';
-import { TreeShapWaterfall } from './components/Sidebar/TreeShapWaterfall';
 import { SegmentInspector } from './components/Sidebar/SegmentInspector';
 import { LocationSearchBox } from './components/Sidebar/LocationSearchBox';
 import { QuickSafeHavenButton } from './components/Sidebar/QuickSafeHavenButton';
-import { EmergencyRefugeModal } from './components/Sidebar/EmergencyRefugeModal';
+import { SafeSheltersModal, FilterCategory } from './components/Sidebar/SafeSheltersModal';
+import { NearestPoliceCard } from './components/Sidebar/NearestPoliceCard';
+import { ExplainabilityRadar } from './components/Sidebar/ExplainabilityRadar';
+import { TreeShapWaterfall } from './components/Sidebar/TreeShapWaterfall';
 import { CivicAdminDashboard } from './components/Admin/CivicAdminDashboard';
-import { GuardianCockpit } from './components/Guardian/GuardianCockpit';
+import { INITIAL_CITIZEN_REPORTS } from './data/civicAdminData';
 import { VolunteerCockpit } from './components/Volunteer/VolunteerCockpit';
 import { ReportHazardModal } from './components/Community/ReportHazardModal';
 import { RouteShareModal } from './components/Sidebar/RouteShareModal';
 import { MapCockpit } from './components/Map/MapCockpit';
-import { EventSimulator } from './components/Simulation/EventSimulator';
-import { CommuterTelemetrySimulator } from './components/Simulation/CommuterTelemetrySimulator';
-import { SafetyCheckModal } from './components/Simulation/SafetyCheckModal';
 import { calculatePuneRoutes } from './engine/graphRouter';
 import { getRoadAlignedRoutes } from './services/roadRoutingService';
 import { calculateCrossTrackDistance, evaluateTelemetryAnomaly } from './engine/telemetryWatchdog';
 import { TelematicsKalmanFilter } from './engine/kalmanFilter';
 import { audioGuidance } from './services/audioGuidance';
 import { offlineStore } from './services/offlineRoutingStore';
-import { apiClient } from './services/apiClient';
-import { DynamicEvent, TelemetryState, AnomalyCheckState, RouteOption, SafeHaven, UserRole, CitizenReport, AppLanguage } from './types/routing';
-import { PUNE_LANDMARKS, PuneLocation } from './services/geocodingService';
-import { AlertCircle, ArrowRight, ChevronDown, Sliders, Cpu, ListFilter, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { DynamicEvent, TelemetryState, AnomalyCheckState, RouteOption, SafeHaven, UserRole, CitizenReport, AppLanguage, TravelProfile } from './types/routing';
+import { createDynamicEventFromReport } from './services/hazardService';
+import { ZeroInstallGuardianView } from './components/Guardian/ZeroInstallGuardianView';
+import { PUNE_LANDMARKS, PuneLocation, getUserCurrentLocation, reverseGeocode, watchUserLiveLocation } from './services/geocodingService';
+import { PUNE_SAFE_HAVENS } from './data/safeHavens';
+import { getKnownSafeHavensSync, fetchLiveSafeHavens } from './services/liveShelterService';
+import { 
+  fetchLiveRoadClosures, 
+  detectClosureIntersections, 
+  convertClosuresToDynamicEvents, 
+  LiveRoadClosure, 
+  PUNE_VERIFIED_ROADWORKS 
+} from './services/liveClosureService';
+import { WeatherRiskProfile, WEATHER_PROFILES } from './components/Commuter/NocturnalWeatherCard';
+import { AlertCircle, ArrowRight, ChevronDown, ChevronUp, Sliders, ListFilter, PanelLeftClose, PanelLeftOpen, ShieldCheck, Cpu } from 'lucide-react';
 import { PrivacyPolicyModal } from './components/Legal/PrivacyPolicyModal';
 import { TermsOfServiceModal } from './components/Legal/TermsOfServiceModal';
 import { CookiePolicyModal } from './components/Legal/CookiePolicyModal';
@@ -37,10 +48,18 @@ import { AboutUsModal } from './components/Pages/AboutUsModal';
 import { ContactUsModal } from './components/Pages/ContactUsModal';
 import { NotFoundView } from './components/Pages/NotFoundView';
 import { Footer } from './components/Common/Footer';
-import { MobileBottomSheet } from './components/Mobile/MobileBottomSheet';
-import { MobileFloatingHud } from './components/Mobile/MobileFloatingHud';
-import { DiscreetEscortModal } from './components/Mobile/DiscreetEscortModal';
-import { MobileSearchModal } from './components/Mobile/MobileSearchModal';
+import { AuthModal } from './components/Auth/AuthModal';
+import { TrustedGuardianModal } from './components/Guardian/TrustedGuardianModal';
+import { EmergencySosModal } from './components/Emergency/EmergencySosModal';
+import { FloatingSosButton } from './components/Emergency/FloatingSosButton';
+import { EmergencyAssistCard } from './components/Emergency/EmergencyAssistCard';
+import { FakeCallModal } from './components/Emergency/FakeCallModal';
+import { LocationShareModal } from './components/Emergency/LocationShareModal';
+import { CabRideShieldModal } from './components/Commuter/CabRideShieldModal';
+import { TripFeedbackModal } from './components/Commuter/TripFeedbackModal';
+import { StreetViewModal, StreetViewData } from './components/Map/StreetViewModal';
+import { getStreetViewDataForSegment } from './data/streetViewData';
+import { SafetyCheckModal } from './components/Simulation/SafetyCheckModal';
 import { SurakshitKavachCockpit } from './components/Hardware/SurakshitKavachCockpit';
 
 export const App: React.FC = () => {
@@ -53,12 +72,16 @@ export const App: React.FC = () => {
     const rawRoute = params.get('route') || 'route_safe';
     const routeParam = ['route_safe', 'route_fastest', 'route_balanced'].includes(rawRoute) ? rawRoute : 'route_safe';
     
-    const originId = params.get('origin') || 'loc_jspm_tathawade';
-    const destId = params.get('dest') || 'loc_kothrud_stand';
+    const originParam = params.get('origin');
+    const destParam = params.get('dest');
     
     const validRoles: UserRole[] = ['commuter', 'guardian', 'volunteer', 'admin'];
     const rawRole = params.get('role') as UserRole;
     const roleParam = validRoles.includes(rawRole) ? rawRole : 'commuter';
+
+    const validProfiles: TravelProfile[] = ['pedestrian', 'two_wheeler', 'four_wheeler', 'transit'];
+    const rawProfile = params.get('profile') as TravelProfile;
+    const profileParam = validProfiles.includes(rawProfile) ? rawProfile : 'pedestrian';
 
     const validLangs: AppLanguage[] = ['en', 'mr', 'hi'];
     const rawLang = params.get('lang') as AppLanguage;
@@ -67,8 +90,73 @@ export const App: React.FC = () => {
     const rawTheme = params.get('theme') || localStorage.getItem('surakshit_theme') || 'dark';
     const themeParam: 'dark' | 'light' = rawTheme === 'light' ? 'light' : 'dark';
 
-    const originLoc = PUNE_LANDMARKS.find(l => l.id === originId) || PUNE_LANDMARKS[0];
-    const destLoc = PUNE_LANDMARKS.find(l => l.id === destId) || PUNE_LANDMARKS[13];
+    const resolveLocation = (id: string | null, fallback: PuneLocation): PuneLocation => {
+      if (!id) return fallback;
+      if (id === 'gps' || id.startsWith('gps')) {
+        return {
+          id: 'gps_my_location',
+          name: '📍 Your Current Location',
+          subtitle: 'Live Device GPS Coordinates',
+          coordinates: fallback.coordinates,
+          category: 'landmark'
+        };
+      }
+      if (id.startsWith('coord_') || id.startsWith('custom_') || id.startsWith('nom_')) {
+        const clean = id.replace(/^(coord_|custom_|nom_)/, '');
+        const parts = clean.split('_');
+        if (parts.length >= 2) {
+          const lat = parseFloat(parts[0]);
+          const lng = parseFloat(parts[1]);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return {
+              id,
+              name: `📍 Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+              subtitle: `Coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+              coordinates: [lat, lng],
+              category: 'landmark'
+            };
+          }
+        }
+      }
+      if (id.includes(',')) {
+        const [latStr, lngStr] = id.split(',');
+        const lat = parseFloat(latStr.trim());
+        const lng = parseFloat(lngStr.trim());
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return {
+            id: `coord_${lat.toFixed(5)}_${lng.toFixed(5)}`,
+            name: `📍 Coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            subtitle: `Selected point: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            coordinates: [lat, lng],
+            category: 'landmark'
+          };
+        }
+      }
+      const landmark = PUNE_LANDMARKS.find(l => l.id === id);
+      if (landmark) return landmark;
+      const haven = getKnownSafeHavensSync().find(h => h.id === id) || PUNE_SAFE_HAVENS.find(h => h.id === id);
+      if (haven) {
+        return {
+          id: haven.id,
+          name: haven.name,
+          subtitle: `${haven.address} (${haven.timing})`,
+          coordinates: haven.coordinates,
+          category: 'landmark'
+        };
+      }
+      return fallback;
+    };
+
+    // Default origin: Tathawade
+    const defaultOrigin = PUNE_LANDMARKS[0];
+    // Default destination: Kothrud
+    const defaultDest = PUNE_LANDMARKS[13] || PUNE_LANDMARKS[1];
+
+    const originLoc = originParam ? resolveLocation(originParam, defaultOrigin) : defaultOrigin;
+    const destLoc = destParam ? resolveLocation(destParam, defaultDest) : defaultDest;
+
+    const isTrackingParam = window.location.pathname.startsWith('/track') || params.get('mode') === 'track';
+    const tripIdParam = params.get('trip') || (window.location.pathname.startsWith('/track/') ? window.location.pathname.replace('/track/', '') : 'tr_89f2a41d');
 
     return {
       beta: betaParam,
@@ -76,13 +164,31 @@ export const App: React.FC = () => {
       origin: originLoc,
       destination: destLoc,
       role: roleParam,
+      profile: profileParam,
       lang: langParam,
-      theme: themeParam
+      theme: themeParam,
+      isTracking: isTrackingParam,
+      tripId: tripIdParam
     };
   }, []);
 
   const [theme, setTheme] = useState<'dark' | 'light'>(initialParams.theme);
   const [userRole, setUserRole] = useState<UserRole>(initialParams.role);
+  const { user } = useAuth();
+
+  // Instant synchronization: transition view whenever operational role is switched via AuthModal
+  useEffect(() => {
+    if (user?.role && user.role !== userRole) {
+      setUserRole(user.role);
+      const url = new URL(window.location.href);
+      url.searchParams.set('role', user.role);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [user?.role, userRole]);
+
+  const [travelProfile, setTravelProfile] = useState<TravelProfile>(initialParams.profile);
+  const [isTrackingMode, setIsTrackingMode] = useState<boolean>(initialParams.isTracking);
+  const [trackingTripId] = useState<string>(initialParams.tripId);
   const [currentLanguage, setCurrentLanguage] = useState<AppLanguage>(initialParams.lang);
   const [origin, setOrigin] = useState<PuneLocation>(initialParams.origin);
   const [destination, setDestination] = useState<PuneLocation>(initialParams.destination);
@@ -90,13 +196,38 @@ export const App: React.FC = () => {
   const [activeRouteId, setActiveRouteId] = useState<string>(initialParams.route);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isPickingOnMap, setIsPickingOnMap] = useState<'origin' | 'destination' | null>(null);
-  const [explainabilityMode, setExplainabilityMode] = useState<'radar' | 'shap'>('radar');
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [citizenReports, setCitizenReports] = useState<CitizenReport[]>([]);
-  const [isRefugesModalOpen, setIsRefugesModalOpen] = useState(false);
-  const [activeLockedHavenId, setActiveLockedHavenId] = useState<string | null>(null);
+  const [isSosOpen, setIsSosOpen] = useState(false);
+  const [isCabShieldOpen, setIsCabShieldOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isStreetViewOpen, setIsStreetViewOpen] = useState(false);
+  const [streetViewData, setStreetViewData] = useState<StreetViewData | null>(null);
+  const [citizenReports, setCitizenReports] = useState<CitizenReport[]>(INITIAL_CITIZEN_REPORTS);
+  const [isSheltersModalOpen, setIsSheltersModalOpen] = useState(false);
+  const [sheltersInitialCategory, setSheltersInitialCategory] = useState<FilterCategory>('all');
+  const [isFakeCallOpen, setIsFakeCallOpen] = useState(false);
+  const [isShareLocationModalOpen, setIsShareLocationModalOpen] = useState(false);
+  const [isKavachModalOpen, setIsKavachModalOpen] = useState(false);
+
+  // Real-time Nocturnal Weather Risk Simulation Profile
+  const [weatherProfile, setWeatherProfile] = useState<WeatherRiskProfile>(WEATHER_PROFILES.clear);
+
+  // Closed-Loop Civic Resolution Notification Toast
+  const [civicToast, setCivicToast] = useState<{
+    title: string;
+    detail: string;
+    points: number;
+    timestamp: number;
+  } | null>(null);
+
+  const handleOpenShelters = (category?: FilterCategory) => {
+    if (category) {
+      setSheltersInitialCategory(category);
+    }
+    setIsSheltersModalOpen(true);
+  };
 
   // Legal & Core Page Modal States
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
@@ -106,26 +237,10 @@ export const App: React.FC = () => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isNotFound, setIsNotFound] = useState(false);
-  const [isSimControlsOpen, setIsSimControlsOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isBetaOpen, setIsBetaOpen] = useState(false);
-  const [isExplainOpen, setIsExplainOpen] = useState(false);
   const [isSegmentsOpen, setIsSegmentsOpen] = useState(false);
-
-  // Mobile Viewport and Discreet Escort States
-  const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 960);
-  const [isDiscreetModeOpen, setIsDiscreetModeOpen] = useState(false);
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const [isKavachModalOpen, setIsKavachModalOpen] = useState(false);
-
-  // Responsive mobile viewport listener
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 960);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const [isExplainOpen, setIsExplainOpen] = useState(false);
 
   // Synchronize data-theme on root HTML and URL/LocalStorage
   useEffect(() => {
@@ -143,7 +258,7 @@ export const App: React.FC = () => {
   // Custom 404 route detection
   useEffect(() => {
     const path = window.location.pathname;
-    if (path !== '/' && path !== '/index.html' && path !== '') {
+    if (path !== '/' && path !== '/index.html' && path !== '' && !path.startsWith('/track')) {
       setIsNotFound(true);
     }
   }, []);
@@ -153,13 +268,25 @@ export const App: React.FC = () => {
     offlineStore.syncOfflinePack();
   }, []);
 
-  // Sync real-time citizen incident reports from database on mount
+  // Warm up and refresh real-time live safe havens around current location
   useEffect(() => {
-    apiClient.getCitizenReports().then(reports => {
-      if (reports && reports.length > 0) {
-        setCitizenReports(reports);
-      }
-    }).catch(() => {});
+    fetchLiveSafeHavens(origin.coordinates);
+  }, [origin.coordinates[0], origin.coordinates[1]]);
+
+  // Real-time Road Construction & Closure State
+  const [liveClosures, setLiveClosures] = useState<LiveRoadClosure[]>(PUNE_VERIFIED_ROADWORKS);
+
+  // Ingest live road closures from Overpass API and map into dynamic edge penalties
+  useEffect(() => {
+    fetchLiveRoadClosures().then(closures => {
+      setLiveClosures(closures);
+      const closureEvents = convertClosuresToDynamicEvents(closures);
+      setDynamicEvents(prev => {
+        const existingIds = new Set(prev.map(e => e.id));
+        const toAdd = closureEvents.filter(e => !existingIds.has(e.id));
+        return [...prev, ...toAdd];
+      });
+    });
   }, []);
 
   // Dynamic simulation events
@@ -205,6 +332,21 @@ export const App: React.FC = () => {
     });
   };
 
+  // Auto-acquire user's live GPS location on startup if origin was explicitly requested as GPS
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlOrigin = params.get('origin');
+    if (urlOrigin === 'gps' || urlOrigin === 'gps_my_location') {
+      getUserCurrentLocation()
+        .then(loc => {
+          setOrigin(loc);
+        })
+        .catch(err => {
+          console.log('GPS waiting for user trigger/permission:', err);
+        });
+    }
+  }, []);
+
   // Sync state back to URL parameters
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -212,10 +354,11 @@ export const App: React.FC = () => {
     params.set('lang', currentLanguage);
     params.set('beta', beta.toFixed(2));
     params.set('route', activeRouteId);
+    params.set('profile', travelProfile);
     params.set('origin', origin.id);
     params.set('dest', destination.id);
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-  }, [userRole, currentLanguage, beta, activeRouteId, origin, destination]);
+  }, [userRole, currentLanguage, beta, activeRouteId, origin, destination, travelProfile]);
 
   // Calculate Pune & Maharashtra routes: initialized immediately with local road-aligned geometry,
   // then asynchronously upgraded with live OpenStreetMap OSRM real-road geometry
@@ -228,12 +371,44 @@ export const App: React.FC = () => {
 
     // Immediately provide local road-aligned routes
     const immediateRoutes = calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates);
+    
+    // Apply weather risk multiplier if nocturnal weather active
+    if (weatherProfile && weatherProfile.mode !== 'clear') {
+      const { lightingMultiplier, scorePenalty } = weatherProfile;
+      immediateRoutes.safe.safetyScore = Math.max(25, immediateRoutes.safe.safetyScore - scorePenalty);
+      if (immediateRoutes.safe.factors) {
+        immediateRoutes.safe.factors.lighting = Number((immediateRoutes.safe.factors.lighting * lightingMultiplier).toFixed(2));
+      }
+      immediateRoutes.fastest.safetyScore = Math.max(10, immediateRoutes.fastest.safetyScore - Math.round(scorePenalty * 1.4));
+      if (immediateRoutes.fastest.factors) {
+        immediateRoutes.fastest.factors.lighting = Number((immediateRoutes.fastest.factors.lighting * lightingMultiplier).toFixed(2));
+      }
+      immediateRoutes.balanced.safetyScore = Math.max(20, immediateRoutes.balanced.safetyScore - scorePenalty);
+      if (immediateRoutes.balanced.factors) {
+        immediateRoutes.balanced.factors.lighting = Number((immediateRoutes.balanced.factors.lighting * lightingMultiplier).toFixed(2));
+      }
+    }
     setRoutes(immediateRoutes);
 
     // Asynchronously upgrade with live OSRM real-road geometry
     getRoadAlignedRoutes(origin.coordinates, destination.coordinates, beta, dynamicEvents)
       .then(liveRoutes => {
         if (!isCancelled && liveRoutes) {
+          if (weatherProfile && weatherProfile.mode !== 'clear') {
+            const { lightingMultiplier, scorePenalty } = weatherProfile;
+            liveRoutes.safe.safetyScore = Math.max(25, liveRoutes.safe.safetyScore - scorePenalty);
+            if (liveRoutes.safe.factors) {
+              liveRoutes.safe.factors.lighting = Number((liveRoutes.safe.factors.lighting * lightingMultiplier).toFixed(2));
+            }
+            liveRoutes.fastest.safetyScore = Math.max(10, liveRoutes.fastest.safetyScore - Math.round(scorePenalty * 1.4));
+            if (liveRoutes.fastest.factors) {
+              liveRoutes.fastest.factors.lighting = Number((liveRoutes.fastest.factors.lighting * lightingMultiplier).toFixed(2));
+            }
+            liveRoutes.balanced.safetyScore = Math.max(20, liveRoutes.balanced.safetyScore - scorePenalty);
+            if (liveRoutes.balanced.factors) {
+              liveRoutes.balanced.factors.lighting = Number((liveRoutes.balanced.factors.lighting * lightingMultiplier).toFixed(2));
+            }
+          }
           setRoutes(liveRoutes);
         }
       })
@@ -244,7 +419,7 @@ export const App: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [beta, dynamicEvents, origin.coordinates, destination.coordinates]);
+  }, [beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile, weatherProfile]);
 
   // Active Route
   const activeRoute: RouteOption = useMemo(() => {
@@ -266,8 +441,21 @@ export const App: React.FC = () => {
     }
   }, [activeRoute]);
 
-  // Telemetry & Commuter Simulation State
+  const handleOpenStreetView = useCallback((edgeId: string) => {
+    const seg = activeRoute.segments.find(s => s.edgeId === edgeId);
+    const data = getStreetViewDataForSegment(
+      edgeId,
+      seg?.name,
+      seg?.coordinates,
+      seg?.factors.lighting
+    );
+    setStreetViewData(data);
+    setIsStreetViewOpen(true);
+  }, [activeRoute.segments]);
+
+  // Telemetry & Commuter Simulation / Live GPS State
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isLiveGpsActive, setIsLiveGpsActive] = useState(false);
   const [telemetry, setTelemetry] = useState<TelemetryState>({
     currentPosition: origin.coordinates,
     activeSegmentIndex: 0,
@@ -279,17 +467,105 @@ export const App: React.FC = () => {
     dwellTimeSeconds: 0
   });
 
+  // Real-time Active Commuter Coordinates:
+  const activeUserCoordinates: [number, number] = useMemo(() => {
+    if (isSimulating || isLiveGpsActive) {
+      return telemetry.currentPosition;
+    }
+    return origin.coordinates;
+  }, [isSimulating, isLiveGpsActive, telemetry.currentPosition, origin.coordinates]);
+
+  // Synchronize telemetry position whenever origin location updates
+  useEffect(() => {
+    if (!isSimulating && !isLiveGpsActive) {
+      setTelemetry(prev => ({
+        ...prev,
+        currentPosition: origin.coordinates
+      }));
+    }
+  }, [origin.coordinates[0], origin.coordinates[1], isSimulating, isLiveGpsActive]);
+
   const [anomalyState, setAnomalyState] = useState<AnomalyCheckState>({
     isOpen: false,
     reason: 'deviation',
-    countdownSeconds: 45,
+    countdownSeconds: 15,
     sosDispatched: false
   });
 
   const animationStepRef = useRef<number>(0);
   const simulationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Commuter Animation Loop with Extended Kalman Filter GPS Smoothing
+  // Anomaly Evaluator with Proactive Audio Cue (15s Check-in Countdown)
+  const triggerAnomalyCheck = useCallback((reason: 'deviation' | 'stationary') => {
+    setIsSimulating(false);
+    setAnomalyState({
+      isOpen: true,
+      reason,
+      countdownSeconds: 15,
+      sosDispatched: false,
+      timestamp: Date.now()
+    });
+
+    audioGuidance.speakSafetyCue(
+      reason === 'deviation'
+        ? 'Warning: Cross-track corridor deviation detected over 50 meters. Initiating 15-second safety check-in.'
+        : 'Alert: Prolonged stationary dwell detected. Are you safe? Initiating 15-second safety check-in.',
+      true
+    );
+  }, []);
+
+  // Real-Time Live GPS Corridor Watchdog
+  useEffect(() => {
+    if (!isLiveGpsActive) return;
+
+    audioGuidance.speakSafetyCue(
+      `Live corridor watchdog active. 50-meter safety geofence armed along ${activeRoute.name.split('·')[0].trim()}.`
+    );
+
+    const stopWatch = watchUserLiveLocation(
+      (rawCoords: [number, number], accuracy: number) => {
+        const kalmanResult = kalmanFilterRef.current.update(rawCoords, accuracy);
+        const smoothedPos = kalmanResult.smoothedCoords;
+        const crossTrack = calculateCrossTrackDistance(smoothedPos, activeRoute);
+        const speedKmh = kalmanResult.speedKmh > 0 ? kalmanResult.speedKmh : 0;
+        const isStationary = speedKmh < 1.0;
+
+        setTelemetry(prev => {
+          const newDwell = isStationary ? prev.dwellTimeSeconds + 2 : 0;
+          return {
+            ...prev,
+            currentPosition: smoothedPos,
+            speedKmh,
+            crossTrackDistanceMeters: crossTrack,
+            isDeviated: crossTrack > 50,
+            isStationary,
+            dwellTimeSeconds: newDwell
+          };
+        });
+
+        if (crossTrack > 50 && !anomalyState.isOpen) {
+          triggerAnomalyCheck('deviation');
+        }
+      },
+      (err: GeolocationPositionError) => {
+        console.warn('[Watchdog] Geolocation error:', err.message);
+      }
+    );
+
+    return () => {
+      stopWatch();
+    };
+  }, [isLiveGpsActive, activeRoute, anomalyState.isOpen, triggerAnomalyCheck]);
+
+  // Stationary Dwell Anomaly Watchdog: 180s (3 minutes) in isolated segment
+  useEffect(() => {
+    if (!isLiveGpsActive || anomalyState.isOpen) return;
+    if (telemetry.isStationary && telemetry.dwellTimeSeconds >= 180) {
+      triggerAnomalyCheck('stationary');
+    }
+  }, [isLiveGpsActive, telemetry.isStationary, telemetry.dwellTimeSeconds, anomalyState.isOpen, triggerAnomalyCheck]);
+
+  // Commuter Animation Loop with Extended Kalman Filter GPS Smoothing (for Simulation Mode)
   useEffect(() => {
     if (!isSimulating || anomalyState.isOpen) {
       if (simulationTimerRef.current) clearInterval(simulationTimerRef.current);
@@ -309,7 +585,6 @@ export const App: React.FC = () => {
       );
 
       const rawPos = coords[coordIndex];
-      // Extended Kalman Filter smoothing against multipath reflections & canyon noise
       const kalmanResult = kalmanFilterRef.current.update(rawPos, 8);
       const smoothedPos = kalmanResult.smoothedCoords;
       const crossTrack = calculateCrossTrackDistance(smoothedPos, activeRoute);
@@ -331,45 +606,26 @@ export const App: React.FC = () => {
     };
   }, [isSimulating, anomalyState.isOpen, activeRoute]);
 
-  // Anomaly Evaluator with Proactive Audio Cue
-  const triggerAnomalyCheck = useCallback((reason: 'deviation' | 'stationary') => {
-    setIsSimulating(false);
-    setAnomalyState({
-      isOpen: true,
-      reason,
-      countdownSeconds: 45,
-      sosDispatched: false,
-      timestamp: Date.now()
-    });
-
-    audioGuidance.speakSafetyCue(
-      reason === 'deviation'
-        ? 'Warning: Cross-track corridor deviation detected. Initiating safety check-in.'
-        : 'Alert: Prolonged stationary dwell detected along isolated stretch. Are you safe?',
-      true
-    );
-  }, []);
-
   useEffect(() => {
-    const { hasAnomaly, reason } = evaluateTelemetryAnomaly(telemetry, true);
-    if (hasAnomaly && reason && !anomalyState.isOpen && isSimulating) {
+    const { hasAnomaly, reason } = evaluateTelemetryAnomaly(telemetry, isSimulating);
+    if (hasAnomaly && reason && !anomalyState.isOpen && (isSimulating || isLiveGpsActive)) {
       triggerAnomalyCheck(reason);
     }
-  }, [telemetry, anomalyState.isOpen, isSimulating, triggerAnomalyCheck]);
+  }, [telemetry, anomalyState.isOpen, isSimulating, isLiveGpsActive, triggerAnomalyCheck]);
 
   // Location Handlers
   const handleSwapLocations = () => {
-    setActiveLockedHavenId(null);
     const temp = origin;
     setOrigin(destination);
     setDestination(temp);
   };
 
-  const handleMapPickLocation = (target: 'origin' | 'destination', coords: [number, number]) => {
+  const handleMapPickLocation = async (target: 'origin' | 'destination', coords: [number, number]) => {
+    const coordId = `coord_${coords[0].toFixed(5)}_${coords[1].toFixed(5)}`;
     const customLocation: PuneLocation = {
-      id: `picked_${Date.now()}`,
-      name: `Map Point (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`,
-      subtitle: 'Custom selected coordinate in Pune',
+      id: coordId,
+      name: `📍 Location (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`,
+      subtitle: `${coords[0].toFixed(5)}°N, ${coords[1].toFixed(5)}°E`,
       coordinates: coords,
       category: 'landmark'
     };
@@ -378,13 +634,20 @@ export const App: React.FC = () => {
       setOrigin(customLocation);
     } else {
       setDestination(customLocation);
-      setActiveLockedHavenId(null);
     }
     setIsPickingOnMap(null);
+
+    try {
+      const enriched = await reverseGeocode(coords);
+      enriched.id = coordId;
+      if (target === 'origin') setOrigin(enriched);
+      else setDestination(enriched);
+    } catch {
+      // keep coordinates
+    }
   };
 
   const handleLockSafeHaven = (haven: SafeHaven) => {
-    setActiveLockedHavenId(haven.id);
     const havenLocation: PuneLocation = {
       id: haven.id,
       name: haven.name,
@@ -394,9 +657,8 @@ export const App: React.FC = () => {
     };
 
     setDestination(havenLocation);
-    setBeta(1.2); // Set maximum safe corridor impedance
+    setBeta(1.2);
     setActiveRouteId('route_safe');
-    setIsRefugesModalOpen(false);
 
     audioGuidance.speakSafetyCue(
       `Emergency safe haven locked: ${haven.name}. Calculating highest visibility corridor.`,
@@ -404,81 +666,39 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleToggleEvent = (eventId: string) => {
-    setDynamicEvents(prev =>
-      prev.map(ev => (ev.id === eventId ? { ...ev, active: !ev.active } : ev))
+  const handleRerouteToPolice = (station: SafeHaven) => {
+    const policeLocation: PuneLocation = {
+      id: station.id,
+      name: `🚨 ${station.name}`,
+      subtitle: `${station.address} · 24/7 Police Outpost`,
+      coordinates: station.coordinates,
+      category: 'landmark'
+    };
+
+    setDestination(policeLocation);
+    setBeta(1.5);
+    setActiveRouteId('route_safe');
+
+    audioGuidance.speakSafetyCue(
+      `Emergency police station route engaged to ${station.name}. Prioritizing fully illuminated arterials with direct police beat coverage.`,
+      true
     );
   };
 
-  const handleResetEvents = () => {
-    setDynamicEvents(prev => prev.map(ev => ({ ...ev, active: false })));
-  };
-
-  const handleSimulateDeviation = () => {
-    const [lat, lng] = telemetry.currentPosition;
-    const deviatedPos: [number, number] = [lat + 0.00065, lng - 0.00075];
-    const crossTrack = calculateCrossTrackDistance(deviatedPos, activeRoute);
-
-    setTelemetry(prev => ({
-      ...prev,
-      currentPosition: deviatedPos,
-      crossTrackDistanceMeters: Math.max(72, crossTrack),
-      isDeviated: true
-    }));
-
-    triggerAnomalyCheck('deviation');
-  };
-
-  const handleSimulateStall = () => {
-    setTelemetry(prev => ({
-      ...prev,
-      speedKmh: 0,
-      isStationary: true,
-      dwellTimeSeconds: 120
-    }));
-
-    triggerAnomalyCheck('stationary');
-  };
-
-  const handleResetSimulation = () => {
-    animationStepRef.current = 0;
-    kalmanFilterRef.current.reset(origin.coordinates);
-    setTelemetry({
-      currentPosition: origin.coordinates,
-      activeSegmentIndex: 0,
-      progressPercent: 0,
-      speedKmh: 0,
-      crossTrackDistanceMeters: 0,
-      isDeviated: false,
-      isStationary: false,
-      dwellTimeSeconds: 0
-    });
-    setIsSimulating(false);
-    setAnomalyState(prev => ({ ...prev, isOpen: false }));
-  };
-
-  // Check if a real-time event is currently degrading the active route
   const handleNewCitizenReport = (report: CitizenReport) => {
     setCitizenReports(prev => [report, ...prev]);
-    const injectedEvent: DynamicEvent = {
-      id: `ev_${report.id}`,
-      title: report.title,
-      description: report.description,
-      type: report.category === 'broken_lamp' ? 'streetlight_outage' : 'crowd_alert',
-      coordinates: report.coordinates,
-      affectedEdgeIds: ['edge_nh48_tathawade_to_wakad'],
-      severity: report.urgency === 'high' ? 0.9 : 0.6,
-      timestamp: report.reportedAt,
-      active: true
-    };
+    const injectedEvent = createDynamicEventFromReport(report);
     setDynamicEvents(prev => [injectedEvent, ...prev]);
-    audioGuidance.speakSafetyCue(`New citizen audit report registered: ${report.title}. Dynamic penalty applied.`);
+    audioGuidance.speakSafetyCue(`New citizen audit report registered: ${report.title}. Dynamic roadway penalty applied.`);
   };
 
-  // Check if a real-time event is currently degrading the active route
   const activeDegradingEvent = dynamicEvents.find(
     e => e.active && activeRoute.segments.some(seg => e.affectedEdgeIds.includes(seg.edgeId))
   );
+
+  const activeRouteClosures = useMemo(() => {
+    return detectClosureIntersections(activeRoute.coordinates, liveClosures);
+  }, [activeRoute.coordinates, liveClosures]);
 
   if (isNotFound) {
     return (
@@ -492,6 +712,15 @@ export const App: React.FC = () => {
           onSelectLanguage={setCurrentLanguage}
           onOpenReportModal={() => setIsReportModalOpen(true)}
           onOpenShareModal={() => setIsShareModalOpen(true)}
+          onOpenSos={() => setIsSosOpen(true)}
+          onOpenCabShield={() => setIsCabShieldOpen(true)}
+          onOpenShelters={handleOpenShelters}
+          onOpenFakeCall={() => setIsFakeCallOpen(true)}
+          onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
+          onLockSafeHaven={handleLockSafeHaven}
+          currentCoordinates={telemetry.currentPosition}
+          userCoordinates={telemetry.currentPosition}
+          onSelectDestination={setDestination}
           theme={theme}
           onToggleTheme={handleToggleTheme}
         />
@@ -515,100 +744,150 @@ export const App: React.FC = () => {
     );
   }
 
-  // Silent SOS trigger from Discreet Escort Calculator
-  const handleSilentSosTriggered = useCallback(() => {
-    setAnomalyState(prev => ({
-      ...prev,
-      isOpen: false,
-      sosDispatched: true
-    }));
-    audioGuidance.speakSafetyCue('Silent escort emergency beacon transmitted to emergency network.');
-    apiClient.submitCitizenReport({
-      id: `sos_${Date.now()}`,
-      category: 'harassment_crowd',
-      title: 'Silent Escort SOS Beacon',
-      description: '[DISCREET ESCORT SILENT SOS] Silent panic beacon dispatched via disguised interface.',
-      coordinates: telemetry.currentPosition,
-      reportedAt: Date.now(),
-      status: 'verified',
-      upvotes: 1,
-      urgency: 'high',
-      landmarkName: 'Discreet Escort Trigger'
-    }).catch(() => {});
-  }, [telemetry.currentPosition]);
-
-  // Hardware SOS trigger from Surakshit-Kavach Smart Charm
-  const handleHardwareSosTriggered = useCallback((reason: string) => {
-    setAnomalyState({
-      isOpen: true,
-      reason: 'deviation',
-      countdownSeconds: 30,
-      sosDispatched: false
-    });
-    audioGuidance.speakSafetyCue(`Emergency alert: ${reason}. Verification countdown started.`);
-    apiClient.submitCitizenReport({
-      id: `kavach_sos_${Date.now()}`,
-      category: 'harassment_crowd',
-      title: 'Surakshit-Kavach Hardware Alert',
-      description: `[HARDWARE SMART CHARM TRIGGER] ${reason}`,
-      coordinates: telemetry.currentPosition,
-      reportedAt: Date.now(),
-      status: 'verified',
-      upvotes: 1,
-      urgency: 'high',
-      landmarkName: 'Surakshit-Kavach Smart Charm'
-    }).catch(() => {});
-  }, [telemetry.currentPosition]);
-
   return (
     <div className="app-container">
-      {!isMobile ? (
-        <Header
-          currentRole={userRole}
-          onSelectRole={setUserRole}
-          isAudioMuted={isAudioMuted}
-          onToggleAudio={handleToggleAudio}
-          currentLanguage={currentLanguage}
-          onSelectLanguage={setCurrentLanguage}
-          onOpenReportModal={() => setIsReportModalOpen(true)}
-          onOpenShareModal={() => setIsShareModalOpen(true)}
-          onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
-          theme={theme}
-          onToggleTheme={handleToggleTheme}
-        />
-      ) : (
-        <MobileFloatingHud
-          origin={origin}
-          destination={destination}
-          onOpenSearch={() => setIsMobileSearchOpen(true)}
-          isAudioMuted={isAudioMuted}
-          onToggleAudio={handleToggleAudio}
-          theme={theme}
-          onToggleTheme={handleToggleTheme}
-          onOpenDiscreetMode={() => setIsDiscreetModeOpen(true)}
-          onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
-          onOpenReportModal={() => setIsReportModalOpen(true)}
-          onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
-          activeLockedHavenId={activeLockedHavenId}
-        />
+      <Header
+        currentRole={userRole}
+        onSelectRole={setUserRole}
+        isAudioMuted={isAudioMuted}
+        onToggleAudio={handleToggleAudio}
+        currentLanguage={currentLanguage}
+        onSelectLanguage={setCurrentLanguage}
+        onOpenReportModal={() => setIsReportModalOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+        onOpenSos={() => setIsSosOpen(true)}
+        onOpenCabShield={() => setIsCabShieldOpen(true)}
+        onOpenShelters={handleOpenShelters}
+        onOpenFakeCall={() => setIsFakeCallOpen(true)}
+        onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
+        onLockSafeHaven={handleLockSafeHaven}
+        currentCoordinates={activeUserCoordinates}
+        userCoordinates={activeUserCoordinates}
+        onSelectDestination={setDestination}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        activeWeatherMode={weatherProfile.mode}
+        onWeatherModeChange={(_, profile) => setWeatherProfile(profile)}
+      />
+
+      {/* Closed-Loop Civic Resolution Floating Toast */}
+      {civicToast && (
+        <div style={{
+          position: 'fixed',
+          top: '64px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          backgroundColor: 'rgba(15, 23, 42, 0.94)',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid rgba(16, 185, 129, 0.5)',
+          borderRadius: '12px',
+          padding: '10px 18px',
+          boxShadow: '0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          maxWidth: '560px',
+          width: 'min(560px, 92vw)',
+          animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(16, 185, 129, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--safe-emerald, #34d399)',
+            flexShrink: 0
+          }}>
+            <ShieldCheck size={18} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>{civicToast.title}</span>
+              <span style={{
+                fontSize: '10px',
+                padding: '1px 6px',
+                borderRadius: '9999px',
+                backgroundColor: 'rgba(16, 185, 129, 0.25)',
+                color: 'var(--safe-emerald)',
+                fontWeight: 800
+              }}>
+                +{civicToast.points} PTS CONFIDENCE
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '2px' }}>
+              {civicToast.detail}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCivicToast(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '4px',
+              fontSize: '14px'
+            }}
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       <main className={`workspace-grid ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-        {/* Left Sidebar Drawer (Desktop Only) */}
-        {!isMobile && (
-          <aside className="sidebar-panel">
+        {/* Left Sidebar Drawer */}
+        <aside className="sidebar-panel">
+          {/* Mobile Bottom Sheet Grabber & Minimize Bar */}
+          <div
+            className="mobile-sheet-drag-handle-bar"
+            onClick={() => setIsSidebarCollapsed(true)}
+            role="button"
+            tabIndex={0}
+            title="Minimize route panel to view full map"
+            aria-label="Minimize route panel to view full map"
+          >
+            <div className="mobile-sheet-drag-pill" />
+            <div className="mobile-sheet-drag-label">
+              <span>Tap to minimize to full map</span>
+            </div>
+          </div>
+
           {userRole === 'admin' && (
             <section className="sidebar-section">
               <ErrorBoundary fallbackTitle="Admin Dashboard Error">
-                <CivicAdminDashboard onHighlightEdge={setSelectedEdgeId} citizenReports={citizenReports} />
-              </ErrorBoundary>
-            </section>
-          )}
+                <CivicAdminDashboard
+                  onHighlightEdge={setSelectedEdgeId}
+                  citizenReports={citizenReports}
+                  onUpdateCitizenReport={(reportId: string, newStatus: CitizenReport['status']) => {
+                    const rep = citizenReports.find(r => r.id === reportId);
+                    setCitizenReports(prev => prev.map(r => r.id === reportId ? { ...r, status: newStatus } : r));
 
-          {userRole === 'guardian' && (
-            <section className="sidebar-section">
-              <ErrorBoundary fallbackTitle="Guardian Cockpit Error">
-                <GuardianCockpit activeRoute={activeRoute} telemetry={telemetry} />
+                    if (newStatus === 'investigating') {
+                      setCivicToast({
+                        title: '🚧 Municipal Dispatch Order Initiated',
+                        detail: `PMC Work Order dispatched to ${rep?.landmarkName || 'reported location'}. Repair crew mobilized.`,
+                        points: 4,
+                        timestamp: Date.now()
+                      });
+                      audioGuidance.speakSafetyCue('Municipal repair crew mobilized for citizen report.');
+                    } else if (newStatus === 'resolved') {
+                      setCivicToast({
+                        title: '🎉 Closed-Loop Civic Resolution',
+                        detail: `Municipal electrical team repaired lighting at ${rep?.landmarkName || 'reported dark spot'}. Arterial illumination restored (+10 pts Safety Confidence)!`,
+                        points: 10,
+                        timestamp: Date.now()
+                      });
+                      audioGuidance.speakSafetyCue('Civic resolution complete. Lighting restored along corridor.');
+                      setDynamicEvents(prev => prev.filter(e => !e.title.toLowerCase().includes('blackout')));
+                    }
+                    setTimeout(() => setCivicToast(null), 7000);
+                  }}
+                />
               </ErrorBoundary>
             </section>
           )}
@@ -623,35 +902,79 @@ export const App: React.FC = () => {
 
           {userRole === 'commuter' && (
             <>
-              {/* Section: Origin & Destination Geocoding Search */}
-              <section className="sidebar-section" style={{ paddingBottom: '12px' }}>
+              {/* Section: Origin & Destination Geocoding Search (Sticky Header) */}
+              <section className="sidebar-section sidebar-sticky-header">
                 <ErrorBoundary fallbackTitle="Search Error">
                   <LocationSearchBox
                     origin={origin}
                     destination={destination}
                     onSelectOrigin={setOrigin}
-                    onSelectDestination={(loc) => {
-                      setDestination(loc);
-                      setActiveLockedHavenId(null);
-                    }}
+                    onSelectDestination={setDestination}
                     onSwapLocations={handleSwapLocations}
                     onPickOnMap={setIsPickingOnMap}
                     isPickingOnMap={isPickingOnMap}
+                    travelProfile={travelProfile}
+                    onSelectTravelProfile={setTravelProfile}
+                    currentLanguage={currentLanguage}
                   />
                 </ErrorBoundary>
               </section>
 
-              {/* Section: 1-Click Emergency Shelter Lock */}
-              <section className="sidebar-section" style={{ paddingTop: '8px', paddingBottom: '12px' }}>
-                <ErrorBoundary fallbackTitle="Safe Haven Error">
-                  <QuickSafeHavenButton
-                    currentCoordinates={telemetry.currentPosition}
-                    onLockSafeHaven={handleLockSafeHaven}
-                    onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
-                    activeLockedHavenId={activeLockedHavenId}
-                  />
-                </ErrorBoundary>
-              </section>
+              {/* Live Road Closure / WIP Detour Alert Banner */}
+              {activeRouteClosures.length > 0 && (
+                <div style={{ padding: '12px 24px 0' }}>
+                  <div style={{
+                    backgroundColor: 'rgba(234, 88, 12, 0.15)',
+                    border: '1px solid rgba(234, 88, 12, 0.45)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    color: '#ffedd5',
+                    boxShadow: '0 2px 10px rgba(234, 88, 12, 0.2)'
+                  }}>
+                    <span style={{ fontSize: '18px', flexShrink: 0 }}>🚧</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: 800, color: '#fb923c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        WIP Construction: {activeRouteClosures[0].name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#fed7aa', marginTop: '2px', lineHeight: 1.3 }}>
+                        {activeRouteClosures[0].reason}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setActiveRouteId('route_safe');
+                        setBeta(1.6);
+                        audioGuidance.speakSafetyCue(
+                          `Roadwork detected on ${activeRouteClosures[0].name}. Rerouting via illuminated arterial bypass.`,
+                          true
+                        );
+                      }}
+                      className="btn-civic"
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        backgroundColor: '#ea580c',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title="Detour around active roadwork and construction"
+                    >
+                      <span>Safe Detour</span>
+                      <ArrowRight size={11} />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic Event Reroute Alert Banner */}
               {activeDegradingEvent && (
@@ -679,7 +1002,6 @@ export const App: React.FC = () => {
               <section className="sidebar-section">
                 <div className="section-label">
                   <span>Candidate Routes Comparison</span>
-                  <span className="brand-badge">Dual-Route Model</span>
                 </div>
                 <ErrorBoundary fallbackTitle="Route Comparison Error">
                   <RouteComparisonCard
@@ -690,12 +1012,56 @@ export const App: React.FC = () => {
                       const selRoute = id === 'route_fastest' ? routes.fastest : id === 'route_balanced' ? routes.balanced : routes.safe;
                       audioGuidance.speakSafetyCue(`Switched to ${selRoute.name}. Safety score: ${selRoute.safetyScore} out of 100.`);
                     }}
+                    onOpenShelters={() => setIsSheltersModalOpen(true)}
+                    onOpenRideShield={() => setIsCabShieldOpen(true)}
+                    currentLanguage={currentLanguage}
                   />
                 </ErrorBoundary>
               </section>
 
-              {/* Section 2: Collapsible Safety Preference & Impedance (Beta Trade-off) */}
-              <section className="sidebar-section" style={{ padding: '10px 24px' }}>
+              {/* Ride Shield Card — Safety-aware cab journey assistant */}
+              <section className="sidebar-section">
+                <ErrorBoundary fallbackTitle="Ride Shield Error">
+                  <RideShieldCard
+                    activeRoute={activeRoute}
+                    origin={origin}
+                    destination={destination}
+                    onOpenRideShield={() => setIsCabShieldOpen(true)}
+                    currentLanguage={currentLanguage}
+                  />
+                </ErrorBoundary>
+              </section>
+
+              {/* Section 2: Quick Action Police Station & Safe Haven Lock */}
+              <section className="sidebar-section" style={{ paddingTop: '4px', paddingBottom: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <ErrorBoundary fallbackTitle="Emergency Assist Error">
+                  <EmergencyAssistCard
+                    onTriggerFakeCall={() => setIsFakeCallOpen(true)}
+                    onOpenShareLocationModal={() => setIsShareLocationModalOpen(true)}
+                  />
+                </ErrorBoundary>
+
+                <ErrorBoundary fallbackTitle="Police Station Card Error">
+                  <NearestPoliceCard
+                    currentCoordinates={activeUserCoordinates}
+                    onRerouteToPolice={handleRerouteToPolice}
+                    currentLanguage={currentLanguage}
+                  />
+                </ErrorBoundary>
+
+                <ErrorBoundary fallbackTitle="Safe Haven Error">
+                  <QuickSafeHavenButton
+                    currentCoordinates={activeUserCoordinates}
+                    activeRoute={activeRoute}
+                    onLockSafeHaven={handleLockSafeHaven}
+                    onOpenSheltersModal={() => setIsSheltersModalOpen(true)}
+                    currentLanguage={currentLanguage}
+                  />
+                </ErrorBoundary>
+              </section>
+
+              {/* Section 3: Collapsible Safety Preference (Everyday Mode) */}
+              <section className="sidebar-section" style={{ padding: '8px 24px 12px' }}>
                 <button
                   type="button"
                   className="accordion-toggle-btn"
@@ -703,10 +1069,12 @@ export const App: React.FC = () => {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Sliders size={14} color="var(--accent-amber)" />
-                    <span style={{ fontWeight: 600, fontSize: '12px' }}>Safety Sensitivity &amp; Trade-Off</span>
+                    <span style={{ fontWeight: 700, fontSize: '12px' }}>Route Safety Priority</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="brand-badge" style={{ fontSize: '10px' }}>β = {beta.toFixed(2)}</span>
+                    <span className="brand-badge" style={{ fontSize: '10px', textTransform: 'none' }}>
+                      {beta >= 1.0 ? '🛡️ Max Safe' : beta >= 0.6 ? '✨ High Safe' : beta >= 0.2 ? '⚖️ Balanced' : '⚡ Fastest'}
+                    </span>
                     <ChevronDown size={14} style={{ transform: isBetaOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
                   </div>
                 </button>
@@ -714,64 +1082,14 @@ export const App: React.FC = () => {
                 {isBetaOpen && (
                   <div className="accordion-body">
                     <ErrorBoundary fallbackTitle="Slider Error">
-                      <SafetySlider beta={beta} onBetaChange={setBeta} />
-                    </ErrorBoundary>
-                  </div>
-                )}
-              </section>
-
-              {/* Section 3: Collapsible Explainable AI & TreeSHAP (ML) */}
-              <section className="sidebar-section" style={{ padding: '10px 24px' }}>
-                <button
-                  type="button"
-                  className="accordion-toggle-btn"
-                  onClick={() => setIsExplainOpen(!isExplainOpen)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Cpu size={14} color="var(--haven-blue)" />
-                    <span style={{ fontWeight: 600, fontSize: '12px' }}>AI Explainability &amp; SHAP Risk</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      {explainabilityMode === 'radar' ? '4-Factor' : 'TreeSHAP'}
-                    </span>
-                    <ChevronDown size={14} style={{ transform: isExplainOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
-                  </div>
-                </button>
-
-                {isExplainOpen && (
-                  <div className="accordion-body">
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px', marginBottom: '8px' }}>
-                      <button
-                        id="btn-xai-radar"
-                        className={`btn-civic ${explainabilityMode === 'radar' ? 'btn-primary-amber' : ''}`}
-                        style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
-                        onClick={() => setExplainabilityMode('radar')}
-                      >
-                        4-Factor Radar
-                      </button>
-                      <button
-                        id="btn-xai-shap"
-                        className={`btn-civic ${explainabilityMode === 'shap' ? 'btn-primary-amber' : ''}`}
-                        style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
-                        onClick={() => setExplainabilityMode('shap')}
-                      >
-                        TreeSHAP (ML)
-                      </button>
-                    </div>
-                    <ErrorBoundary fallbackTitle="Explainability View Error">
-                      {explainabilityMode === 'radar' ? (
-                        <ExplainabilityRadar activeRoute={activeRoute} />
-                      ) : (
-                        <TreeShapWaterfall activeRoute={activeRoute} />
-                      )}
+                      <SafetySlider beta={beta} onBetaChange={setBeta} currentLanguage={currentLanguage} />
                     </ErrorBoundary>
                   </div>
                 )}
               </section>
 
               {/* Section 4: Collapsible Micro-Segment Inspector */}
-              <section className="sidebar-section" style={{ padding: '10px 24px' }}>
+              <section className="sidebar-section" style={{ padding: '8px 24px 12px' }}>
                 <button
                   type="button"
                   className="accordion-toggle-btn"
@@ -794,6 +1112,41 @@ export const App: React.FC = () => {
                         segments={activeRoute.segments}
                         selectedEdgeId={selectedEdgeId}
                         onSelectSegment={setSelectedEdgeId}
+                        onOpenStreetView={handleOpenStreetView}
+                        currentLanguage={currentLanguage}
+                      />
+                    </ErrorBoundary>
+                  </div>
+                )}
+              </section>
+
+              {/* Section 5: AI Safety Explainability & SHAP Waterfall */}
+              <section className="sidebar-section" style={{ padding: '8px 24px 16px' }}>
+                <button
+                  type="button"
+                  className="accordion-toggle-btn"
+                  onClick={() => setIsExplainOpen(!isExplainOpen)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Cpu size={14} color="var(--haven-blue)" />
+                    <span style={{ fontWeight: 600, fontSize: '12px' }}>Explainability & Feature SHAP</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="brand-badge" style={{ fontSize: '10px' }}>ML Radar</span>
+                    <ChevronDown size={14} style={{ transform: isExplainOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
+                  </div>
+                </button>
+
+                {isExplainOpen && (
+                  <div className="accordion-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <ErrorBoundary fallbackTitle="Radar Error">
+                      <ExplainabilityRadar
+                        activeRoute={activeRoute}
+                      />
+                    </ErrorBoundary>
+                    <ErrorBoundary fallbackTitle="Tree SHAP Error">
+                      <TreeShapWaterfall
+                        activeRoute={activeRoute}
                       />
                     </ErrorBoundary>
                   </div>
@@ -802,20 +1155,50 @@ export const App: React.FC = () => {
             </>
           )}
         </aside>
-        )}
 
         {/* Right Map Viewport */}
-        <section style={{ position: 'relative', width: '100%', height: '100%' }}>
-          {/* Floating Sidebar Dock Toggle (Full-Screen Map Freedom - Desktop Only) */}
-          {!isMobile && (
-            <button
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="map-sidebar-dock-toggle"
-              title={isSidebarCollapsed ? "Expand Navigation & Routes Sidebar" : "Hide Sidebar for Full-Screen Map Freedom"}
+        <section className="map-viewport-section" style={{ position: 'relative', width: '100%', height: '100%' }}>
+          {/* Floating Sidebar Dock Toggle (Full-Screen Map Freedom) */}
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="map-sidebar-dock-toggle"
+            title={isSidebarCollapsed ? "Expand Navigation & Routes Sidebar" : "Hide Sidebar for Full-Screen Map Freedom"}
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={14} color="var(--accent-amber)" /> : <PanelLeftClose size={14} />}
+            <span>{isSidebarCollapsed ? "Show Routes" : "Full Map"}</span>
+          </button>
+
+          {/* Mobile Bottom Peek Card */}
+          {isSidebarCollapsed && !isLiveGpsActive && (
+            <div
+              className="mobile-bottom-peek-card"
+              onClick={() => setIsSidebarCollapsed(false)}
+              role="button"
+              tabIndex={0}
+              title="Tap to view safe route choices and turn-by-turn navigation"
+              aria-label="Tap to view safe route choices and turn-by-turn navigation"
             >
-              {isSidebarCollapsed ? <PanelLeftOpen size={14} color="var(--accent-amber)" /> : <PanelLeftClose size={14} />}
-              <span>{isSidebarCollapsed ? "Show Routes" : "Full Map"}</span>
-            </button>
+              <div className="mobile-peek-drag-pill" />
+              <div className="mobile-peek-row">
+                <div className="mobile-peek-info">
+                  <div className="mobile-peek-badges">
+                    <span className="badge-shield-score">
+                      🛡️ {activeRoute.safetyScore}/100 Safe
+                    </span>
+                    <span className="badge-eta">
+                      {activeRoute.durationMinutes} min • {(activeRoute.distanceMeters / 1000).toFixed(1)} km
+                    </span>
+                  </div>
+                  <div className="mobile-peek-name">
+                    {activeRoute.name}
+                  </div>
+                </div>
+                <div className="mobile-peek-btn">
+                  <span>Routes</span>
+                  <ChevronUp size={16} />
+                </div>
+              </div>
+            </div>
           )}
 
           <ErrorBoundary fallbackTitle="Map Cockpit Error">
@@ -833,92 +1216,22 @@ export const App: React.FC = () => {
               onMapPickLocation={handleMapPickLocation}
               citizenReports={citizenReports}
               theme={theme}
+              travelProfile={travelProfile}
+              isSimulating={isSimulating}
+              onToggleSimulation={() => setIsSimulating(!isSimulating)}
+              isLiveNavigating={isLiveGpsActive}
+              onToggleLiveNavigation={(active) => {
+                setIsLiveGpsActive(active);
+                if (active) {
+                  setIsSidebarCollapsed(true);
+                }
+              }}
               onLockSafeHaven={handleLockSafeHaven}
-              activeLockedHavenId={activeLockedHavenId}
-              onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
+              currentLanguage={currentLanguage}
             />
           </ErrorBoundary>
-
-          {/* Floating Live Simulation & Event Controls (Collapsible for Uncluttered View) */}
-          <div className="map-floating-overlay">
-            {!isSimControlsOpen ? (
-              <button
-                onClick={() => setIsSimControlsOpen(true)}
-                className="btn-civic"
-                style={{
-                  backgroundColor: 'rgba(18, 20, 26, 0.94)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid var(--accent-amber)',
-                  color: 'var(--text-primary)',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.65)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600
-                }}
-              >
-                <span style={{ color: 'var(--accent-amber)' }}>⚡ Simulation &amp; Watchdog</span>
-                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(245, 158, 11, 0.2)', color: 'var(--accent-amber)', fontWeight: 700 }}>
-                  Open Panel
-                </span>
-              </button>
-            ) : (
-              <ErrorBoundary fallbackTitle="Simulator Error">
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
-                  <button
-                    onClick={() => setIsSimControlsOpen(false)}
-                    className="btn-civic"
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      backgroundColor: 'rgba(30, 34, 44, 0.95)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '6px',
-                      color: 'var(--text-muted)'
-                    }}
-                  >
-                    ✕ Minimize Panel
-                  </button>
-                </div>
-                <EventSimulator
-                  activeEvents={dynamicEvents}
-                  onToggleEvent={handleToggleEvent}
-                  onResetEvents={handleResetEvents}
-                />
-
-                <CommuterTelemetrySimulator
-                  isSimulating={isSimulating}
-                  telemetry={telemetry}
-                  onTogglePlay={() => {
-                    const nextSim = !isSimulating;
-                    setIsSimulating(nextSim);
-                    if (nextSim) {
-                      audioGuidance.speakSafetyCue(`Starting trip simulation from ${origin.name} to ${destination.name}. Safe corridor tracking active.`);
-                    }
-                  }}
-                  onSimulateDeviation={handleSimulateDeviation}
-                  onSimulateStall={handleSimulateStall}
-                  onResetSimulation={handleResetSimulation}
-                />
-              </ErrorBoundary>
-            )}
-          </div>
         </section>
       </main>
-
-      {/* Unskippable "Are You Safe?" Anomaly Check Modal */}
-      {anomalyState.isOpen && (
-        <SafetyCheckModal
-          anomalyState={anomalyState}
-          telemetry={telemetry}
-          activeRoute={activeRoute}
-          onDismiss={() => setAnomalyState(prev => ({ ...prev, isOpen: false }))}
-          onSosDispatched={() => setAnomalyState(prev => ({ ...prev, sosDispatched: true }))}
-        />
-      )}
 
       {/* Community Citizen Incident Reporting Modal */}
       <ReportHazardModal
@@ -926,15 +1239,7 @@ export const App: React.FC = () => {
         currentCoordinates={telemetry.currentPosition}
         onClose={() => setIsReportModalOpen(false)}
         onSubmitReport={handleNewCitizenReport}
-      />
-
-      {/* Ask for Angela Verified Safe Haven Directory Modal */}
-      <EmergencyRefugeModal
-        isOpen={isRefugesModalOpen}
-        onClose={() => setIsRefugesModalOpen(false)}
-        currentCoordinates={telemetry.currentPosition}
-        onLockSafeHaven={handleLockSafeHaven}
-        activeLockedHavenId={activeLockedHavenId}
+        onTriggerSos={() => setIsSosOpen(true)}
       />
 
       {/* Share Safe Route Pass Modal */}
@@ -946,84 +1251,32 @@ export const App: React.FC = () => {
         onClose={() => setIsShareModalOpen(false)}
       />
 
-      {/* Docked Civic Footer with Legal & A11y Links (Desktop Only) */}
-      {!isMobile && (
-        <Footer
-          onOpenPrivacy={() => setIsPrivacyOpen(true)}
-          onOpenTerms={() => setIsTermsOpen(true)}
-          onOpenCookies={() => setIsCookiesOpen(true)}
-          onOpenA11y={() => setIsA11yOpen(true)}
-          onOpenAbout={() => setIsAboutOpen(true)}
-          onOpenContact={() => setIsContactOpen(true)}
-          originName={origin.name}
-          destinationName={destination.name}
-        />
-      )}
-
-      {/* Mobile Draggable Bottom Sheet */}
-      {isMobile && userRole === 'commuter' && (
-        <MobileBottomSheet
+      {/* Zero-Install Guardian Live Tracking Interface */}
+      {isTrackingMode && (
+        <ZeroInstallGuardianView
+          tripId={trackingTripId}
           activeRoute={activeRoute}
-          routes={routes}
-          activeRouteId={activeRouteId}
-          onSelectRoute={(id) => {
-            setActiveRouteId(id);
-            const selRoute = id === 'route_fastest' ? routes.fastest : id === 'route_balanced' ? routes.balanced : routes.safe;
-            audioGuidance.speakSafetyCue(`Switched to ${selRoute.name}. Safety score: ${selRoute.safetyScore} out of 100.`);
-          }}
-          origin={origin}
-          destination={destination}
-          beta={beta}
-          onBetaChange={setBeta}
-          selectedEdgeId={selectedEdgeId}
-          onSelectSegment={setSelectedEdgeId}
-          onOpenReportModal={() => setIsReportModalOpen(true)}
-          onOpenShareModal={() => setIsShareModalOpen(true)}
-          onOpenRefugesModal={() => setIsRefugesModalOpen(true)}
-          activeLockedHavenId={activeLockedHavenId}
-          isSimulating={isSimulating}
-          onToggleSimulating={() => {
-            const nextSim = !isSimulating;
-            setIsSimulating(nextSim);
-            if (nextSim) {
-              audioGuidance.speakSafetyCue(`Starting trip simulation from ${origin.name} to ${destination.name}. Safe corridor tracking active.`);
-            }
+          telemetry={telemetry}
+          onExitTracking={() => {
+            setIsTrackingMode(false);
+            const url = new URL(window.location.href);
+            url.searchParams.delete('mode');
+            url.searchParams.delete('trip');
+            window.history.pushState({}, '', url.pathname.startsWith('/track') ? '/' : url.toString());
           }}
         />
       )}
 
-      {/* Mobile Search & Destination Modal */}
-      <MobileSearchModal
-        isOpen={isMobileSearchOpen}
-        onClose={() => setIsMobileSearchOpen(false)}
-        origin={origin}
-        destination={destination}
-        onSelectOrigin={setOrigin}
-        onSelectDestination={(loc) => {
-          setDestination(loc);
-          setActiveLockedHavenId(null);
-        }}
-        onSwapLocations={handleSwapLocations}
-        onPickOnMap={(target) => {
-          setIsPickingOnMap(target);
-          setIsMobileSearchOpen(false);
-        }}
-        isPickingOnMap={isPickingOnMap}
-      />
-
-      {/* Discreet Escort Mode Modal (Disguised Functional Calculator with Panic PIN) */}
-      <DiscreetEscortModal
-        isOpen={isDiscreetModeOpen}
-        onClose={() => setIsDiscreetModeOpen(false)}
-        onSilentSosTriggered={handleSilentSosTriggered}
-        currentCoordinates={telemetry.currentPosition}
-      />
-
-      {/* Surakshit-Kavach Smart Charm Hardware Cockpit */}
-      <SurakshitKavachCockpit
-        isOpen={isKavachModalOpen}
-        onClose={() => setIsKavachModalOpen(false)}
-        onTriggerSos={handleHardwareSosTriggered}
+      {/* Docked Civic Footer with Legal & A11y Links */}
+      <Footer
+        onOpenPrivacy={() => setIsPrivacyOpen(true)}
+        onOpenTerms={() => setIsTermsOpen(true)}
+        onOpenCookies={() => setIsCookiesOpen(true)}
+        onOpenA11y={() => setIsA11yOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
+        onOpenContact={() => setIsContactOpen(true)}
+        originName={origin.name}
+        destinationName={destination.name}
       />
 
       {/* Zero-Ad Privacy & Essential Storage Consent Banner */}
@@ -1041,6 +1294,98 @@ export const App: React.FC = () => {
       {/* Core Pages */}
       <AboutUsModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
       <ContactUsModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
+
+      {/* Industry-Grade Firebase Commuter Auth Modal */}
+      <AuthModal />
+
+      {/* Trusted Guardians Circle Management Modal */}
+      <TrustedGuardianModal />
+
+      {/* 24/7 Verified Safe Shelters & Emergency Refuges Modal */}
+      <SafeSheltersModal
+        isOpen={isSheltersModalOpen}
+        onClose={() => setIsSheltersModalOpen(false)}
+        currentCoordinates={activeUserCoordinates}
+        activeRoute={activeRoute}
+        onLockSafeHaven={handleLockSafeHaven}
+        initialCategory={sheltersInitialCategory}
+      />
+
+      {/* Emergency 112 SOS Cockpit Modal */}
+      <EmergencySosModal
+        isOpen={isSosOpen}
+        onClose={() => setIsSosOpen(false)}
+        currentPosition={activeUserCoordinates}
+        activeRouteName={activeRoute.name}
+        crossTrackDistanceMeters={telemetry.crossTrackDistanceMeters}
+      />
+
+      {/* Safe Cab & Auto Ride Shield Modal */}
+      <CabRideShieldModal
+        isOpen={isCabShieldOpen}
+        onClose={() => setIsCabShieldOpen(false)}
+        origin={origin}
+        destination={destination}
+        activeRoute={activeRoute}
+        telemetry={telemetry}
+        onTripCompleted={() => setIsFeedbackOpen(true)}
+        onOpenSos={() => setIsSosOpen(true)}
+        currentLanguage={currentLanguage}
+      />
+
+      {/* 2-Tier Commuter End-of-Trip Feedback Modal */}
+      <TripFeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+        onOpenHazardReport={() => setIsReportModalOpen(true)}
+        routeName={activeRoute.name}
+        destinationName={destination.name}
+      />
+
+      {/* Ground-Level Street Audit 360° Modal */}
+      <StreetViewModal
+        isOpen={isStreetViewOpen}
+        data={streetViewData}
+        onClose={() => setIsStreetViewOpen(false)}
+      />
+
+      {/* Simulated Incoming Decoy Fake Call Screen */}
+      <FakeCallModal
+        isOpen={isFakeCallOpen}
+        onClose={() => setIsFakeCallOpen(false)}
+      />
+
+      {/* Consent-Based Live GPS Location Sharing Modal */}
+      <LocationShareModal
+        isOpen={isShareLocationModalOpen}
+        onClose={() => setIsShareLocationModalOpen(false)}
+      />
+
+      {/* Surakshit Kavach BLE Safety Charm & Mesh Hardware Modal */}
+      <SurakshitKavachCockpit
+        isOpen={isKavachModalOpen}
+        onClose={() => setIsKavachModalOpen(false)}
+        onTriggerSos={() => setIsSosOpen(true)}
+      />
+
+      {/* Active Corridor Safety Check-in Anomaly Modal */}
+      {anomalyState.isOpen && (
+        <SafetyCheckModal
+          anomalyState={anomalyState}
+          telemetry={telemetry}
+          activeRoute={activeRoute}
+          onDismiss={() => setAnomalyState(prev => ({ ...prev, isOpen: false }))}
+          onSosDispatched={() => {
+            setAnomalyState(prev => ({ ...prev, sosDispatched: true }));
+            setIsSosOpen(true);
+          }}
+        />
+      )}
+
+      {/* Floating 1-Tap Emergency SOS Trigger Button for Commuters */}
+      {userRole === 'commuter' && !isTrackingMode && (
+        <FloatingSosButton onClick={() => setIsSosOpen(true)} />
+      )}
     </div>
   );
 };
