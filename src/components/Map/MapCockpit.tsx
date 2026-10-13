@@ -62,11 +62,16 @@ export const MapCockpit: React.FC<Props> = ({
   currentLanguage = 'en'
 }) => {
   const t = getTranslation(currentLanguage);
-  const [mapStyle, setMapStyle] = useState<MapTileStyle>('google_roads');
-  const [showBoundaries, setShowBoundaries] = useState<boolean>(true);
-  const [showCityLabels, setShowCityLabels] = useState<boolean>(true);
+  const [mapStyle, setMapStyle] = useState<MapTileStyle>(theme === 'dark' ? 'carto_dark' : 'carto_voyager');
+  const [showBoundaries, setShowBoundaries] = useState<boolean>(false);
+  const [showCityLabels, setShowCityLabels] = useState<boolean>(false);
   const [isLayerMenuOpen, setIsLayerMenuOpen] = useState(false);
   const { havens: liveHavens } = useLiveShelters(origin.coordinates);
+
+  // Synchronize mapStyle with active app theme if not manually overridden
+  useEffect(() => {
+    setMapStyle(theme === 'dark' ? 'carto_dark' : 'carto_voyager');
+  }, [theme]);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -164,11 +169,11 @@ export const MapCockpit: React.FC<Props> = ({
 
     let newLayer: L.TileLayer;
     if (mapStyle === 'carto_dark') {
-      // CARTO Dark Matter: High-contrast nocturnal safe-routing cartography
-      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
-        maxZoom: 20
+      // High-contrast nocturnal safe-routing dark cartography (100% free, zero watermark)
+      newLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        className: 'dark-mode-tiles',
+        attribution: '&copy; OpenStreetMap contributors · Night Cartography',
+        maxZoom: 19
       });
     } else if (mapStyle === 'carto_voyager') {
       // CARTO Voyager: Crisp, clean daylight cartography
@@ -322,7 +327,10 @@ export const MapCockpit: React.FC<Props> = ({
 
     layerGroup.clearLayers();
 
-    liveHavens.forEach((haven: SafeHaven) => {
+    // Render top 12 nearest verified safe havens to prevent dense visual cluster pileups
+    const displayHavens = liveHavens.slice(0, 12);
+
+    displayHavens.forEach((haven: SafeHaven) => {
       let iconSymbol = '🛡️';
       let iconBg = theme === 'dark' ? '#0f172a' : '#ffffff';
       let borderColor = '#3b82f6';
