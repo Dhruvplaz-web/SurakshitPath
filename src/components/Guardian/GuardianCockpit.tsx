@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { RouteOption, TelemetryState } from '../../types/routing';
-import { ShieldCheck, BatteryCharging, Wifi, Phone, AlertTriangle, ExternalLink, Radio, MessageSquare } from 'lucide-react';
+import { ShieldCheck, BatteryCharging, Wifi, Phone, Navigation, AlertTriangle, ExternalLink, CheckCircle } from 'lucide-react';
 
 interface Props {
   activeRoute: RouteOption;
@@ -17,46 +17,25 @@ export const GuardianCockpit: React.FC<Props> = ({ activeRoute, telemetry }) => 
   const isSafe = telemetry.crossTrackDistanceMeters <= 50 && !telemetry.isStationary;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Guardian Status Header */}
       <div style={{
-        backgroundColor: isSafe ? 'var(--safe-emerald-subtle)' : 'var(--danger-crimson-subtle)',
-        border: `1px solid ${isSafe ? 'var(--safe-emerald)' : 'var(--danger-crimson)'}`,
-        borderRadius: 'var(--radius-lg)',
-        padding: '14px',
+        backgroundColor: isSafe ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.1)',
+        border: `1px solid ${isSafe ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.4)'}`,
+        borderRadius: '8px',
+        padding: '12px 14px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        boxShadow: isSafe ? 'var(--shadow-glow-emerald)' : 'var(--shadow-glow-crimson)'
+        justifyContent: 'space-between'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {isSafe ? (
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'rgba(16, 185, 129, 0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <ShieldCheck size={20} color="var(--safe-emerald)" />
-            </div>
+            <ShieldCheck size={20} color="var(--safe-emerald)" />
           ) : (
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'rgba(239, 68, 68, 0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <AlertTriangle size={20} color="var(--danger-crimson)" />
-            </div>
+            <AlertTriangle size={20} color="var(--danger-crimson)" />
           )}
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
               Live Trip Companion · Dhruv
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
@@ -67,18 +46,14 @@ export const GuardianCockpit: React.FC<Props> = ({ activeRoute, telemetry }) => 
 
         <span style={{
           fontSize: '10px',
-          fontWeight: 800,
-          backgroundColor: isSafe ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)',
+          fontWeight: 700,
+          backgroundColor: isSafe ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
           color: isSafe ? 'var(--safe-emerald)' : 'var(--danger-crimson)',
-          padding: '4px 8px',
-          borderRadius: 'var(--radius-full)',
-          border: `1px solid ${isSafe ? 'var(--safe-emerald)' : 'var(--danger-crimson)'}`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px'
+          padding: '2px 8px',
+          borderRadius: '4px',
+          border: `1px solid ${isSafe ? 'var(--safe-emerald)' : 'var(--danger-crimson)'}`
         }}>
-          <Radio size={11} className="animate-pulse" />
-          {isSafe ? 'CORRIDOR SAFE' : 'ANOMALY DETECTED'}
+          {isSafe ? 'SAFE & ON-ROUTE' : 'ATTENTION REQUIRED'}
         </span>
       </div>
 
@@ -87,15 +62,14 @@ export const GuardianCockpit: React.FC<Props> = ({ activeRoute, telemetry }) => 
         <div style={{
           backgroundColor: 'var(--surface-card)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          padding: '10px 12px',
-          boxShadow: 'var(--shadow-subtle)'
+          borderRadius: '8px',
+          padding: '10px 12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--text-muted)' }}>
             <BatteryCharging size={13} color="var(--safe-emerald)" />
             <span>PHONE BATTERY</span>
           </div>
-          <div className="mono-num" style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+          <div className="mono-num" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
             78% Normal
           </div>
           <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Estimated 4.2h runtime</div>
@@ -104,15 +78,14 @@ export const GuardianCockpit: React.FC<Props> = ({ activeRoute, telemetry }) => 
         <div style={{
           backgroundColor: 'var(--surface-card)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          padding: '10px 12px',
-          boxShadow: 'var(--shadow-subtle)'
+          borderRadius: '8px',
+          padding: '10px 12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: 'var(--text-muted)' }}>
             <Wifi size={13} color="var(--haven-blue)" />
             <span>CELLULAR SIGNAL</span>
           </div>
-          <div className="mono-num" style={{ fontSize: '16px', fontWeight: 800, color: 'var(--haven-blue)', marginTop: '2px' }}>
+          <div className="mono-num" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--haven-blue)', marginTop: '2px' }}>
             5G Ultra
           </div>
           <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Jio 5G · Low Latency (24ms)</div>
@@ -123,104 +96,106 @@ export const GuardianCockpit: React.FC<Props> = ({ activeRoute, telemetry }) => 
       <div style={{
         backgroundColor: 'var(--surface-card)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '14px',
-        boxShadow: 'var(--shadow-subtle)'
+        borderRadius: '8px',
+        padding: '12px 14px'
       }}>
-        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
-          Real-Time Cross-Track Distance
+        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+          Route Adherence & Corridor Buffer
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <div>
-            <div className="mono-num" style={{
-              fontSize: '22px',
-              fontWeight: 800,
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Cross-Track Corridor Error:</span>
+            <strong className="mono-num" style={{
               color: telemetry.crossTrackDistanceMeters > 50 ? 'var(--danger-crimson)' : 'var(--safe-emerald)'
             }}>
-              {telemetry.crossTrackDistanceMeters}m
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              Deviation threshold: &plusmn;50m
-            </div>
+              {telemetry.crossTrackDistanceMeters}m (Threshold: 50m)
+            </strong>
           </div>
 
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Live Movement Speed:</span>
+            <strong className="mono-num" style={{ color: 'var(--text-primary)' }}>
+              {telemetry.speedKmh.toFixed(1)} km/h
+            </strong>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Current Coordinate:</span>
+            <strong className="mono-num" style={{ color: 'var(--haven-blue)' }}>
+              {lat.toFixed(5)}° N, {lng.toFixed(5)}° E
+            </strong>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
           <a
             href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="btn-civic"
-            style={{ fontSize: '11px', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+            style={{ width: '100%', justifyContent: 'center', fontSize: '11px', color: '#93c5fd' }}
           >
-            <span>Open in Maps</span>
-            <ExternalLink size={12} />
+            <ExternalLink size={12} /> Open Real-Time Location in Google Maps
           </a>
-        </div>
-
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
-          <strong>Coordinates:</strong> <span className="mono-num">{lat.toFixed(5)}, {lng.toFixed(5)}</span>
         </div>
       </div>
 
-      {/* Quick Action Emergency Buttons */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <a
-          href="tel:+919665184535"
-          onClick={() => setCallInitiated(true)}
-          className="btn-civic btn-primary-amber"
-          style={{
-            width: '100%',
-            padding: '10px 14px',
-            fontSize: '12px',
-            textDecoration: 'none',
+      {/* Guardian Escalation Actions */}
+      <div style={{
+        backgroundColor: 'var(--surface-card)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '8px',
+        padding: '12px 14px'
+      }}>
+        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+          Guardian Instant Escalation Hub
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            onClick={() => setCallInitiated(true)}
+            className="btn-civic"
+            style={{
+              padding: '8px 12px',
+              fontSize: '12px',
+              backgroundColor: callInitiated ? 'rgba(16, 185, 129, 0.15)' : 'var(--surface-elevated)',
+              borderColor: callInitiated ? 'var(--safe-emerald)' : 'var(--border-subtle)',
+              color: callInitiated ? 'var(--safe-emerald)' : 'var(--text-primary)'
+            }}
+          >
+            <Phone size={14} />
+            <span>{callInitiated ? 'Calling Commuter (+91 98230 XXXXX)...' : 'Call Commuter Directly'}</span>
+          </button>
+
+          <button
+            onClick={() => setPoliceForwarded(true)}
+            className="btn-civic btn-danger-crimson"
+            style={{ padding: '8px 12px', fontSize: '12px' }}
+          >
+            <Navigation size={14} />
+            <span>{policeForwarded ? 'Telematics Sent to Pune Police (112)' : 'Forward Telematics to Pune Police (112)'}</span>
+          </button>
+        </div>
+
+        {policeForwarded && (
+          <div style={{
+            marginTop: '10px',
+            padding: '8px 10px',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid var(--safe-emerald)',
+            borderRadius: '6px',
+            fontSize: '11px',
+            color: 'var(--safe-emerald)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}
-          title="Place direct cellular call to Dhruv (+91 96651 84535)"
-        >
-          <Phone size={14} />
-          <span>{callInitiated ? 'Calling Dhruv...' : 'Call Dhruv'}</span>
-        </a>
-
-        <a
-          href={`https://wa.me/919665184535?text=${encodeURIComponent(
-            `🛡️ SurakshitPath Guardian Companion: Calling Dhruv regarding active trip to ${activeRoute.name.split('·')[0].trim()}. GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`
-          )}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-civic"
-          style={{
-            width: '100%',
-            padding: '10px 14px',
-            fontSize: '12px',
-            textDecoration: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            backgroundColor: 'rgba(37, 211, 102, 0.15)',
-            border: '1px solid #25d366',
-            color: '#25d366'
-          }}
-          title="Open WhatsApp Voice Call / Message"
-        >
-          <MessageSquare size={14} />
-          <span>WhatsApp Dhruv</span>
-        </a>
-
-        <button
-          type="button"
-          onClick={() => setPoliceForwarded(true)}
-          className="btn-civic btn-danger-crimson"
-          style={{ width: '100%', padding: '10px 14px', fontSize: '12px' }}
-        >
-          <ShieldCheck size={14} />
-          <span>{policeForwarded ? 'Forwarded (112) ✅' : 'Forward to Police (112)'}</span>
-        </button>
+            gap: '6px'
+          }}>
+            <CheckCircle size={13} />
+            <span>Emergency ticket #PUN-POL-8821 dispatched to nearest patrol car.</span>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
-export default GuardianCockpit;

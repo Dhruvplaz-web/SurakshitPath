@@ -9,8 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/geolocation": "^8.2.3",
+    "@capacitor/motion": "^8.0.1",
     "@turf/turf": "^7.2.0",
-    "firebase": "^12.19.0",
+    "firebase": "^13.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",

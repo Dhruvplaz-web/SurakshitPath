@@ -82,7 +82,7 @@ export interface RouteOption {
   id: string;
   name: string;
   tagline: string;
-  routeType: 'fastest' | 'safe' | 'balanced';
+  routeType: 'fastest' | 'safe' | 'balanced' | 'transit';
   travelProfile?: TravelProfile;
   distanceMeters: number;
   durationMinutes: number;
@@ -103,6 +103,7 @@ export type SafeHavenType =
   | 'pharmacy_247'
   | 'hospital'
   | 'transit_hub'
+  | 'commercial_refuge'
   | 'women_shelter'
   | 'crisis_shelter'
   | 'community_sanctuary'
@@ -121,6 +122,12 @@ export interface SafeHaven {
   trustScore?: number;
   verifiedBy?: string;
   facilities?: string[];
+  is24x7?: boolean;
+  askForAngelaTrained?: boolean;
+  hasPhoneCharger?: boolean;
+  safeWaitingArea?: boolean;
+  securityStaffOnDuty?: boolean;
+  accreditationBadge?: string;
 }
 
 export type DynamicEventType = 'streetlight_outage' | 'crowd_alert' | 'road_closure';

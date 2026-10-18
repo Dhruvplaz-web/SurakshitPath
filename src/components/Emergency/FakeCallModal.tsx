@@ -133,6 +133,9 @@ export const FakeCallModal: React.FC<Props> = ({
 
   // Decline/End call handler
   const handleEndCall = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     fakeCallAudio.stopRinging();
     setCallState('ended');
     setTimeout(() => {
@@ -171,6 +174,27 @@ export const FakeCallModal: React.FC<Props> = ({
       setCallerReply(resp.reply);
     }, 1500);
   };
+
+  // Voice Speech Synthesis: Speaks caller's dialogue aloud through device speaker/earpiece
+  useEffect(() => {
+    if (!callerReply || callerReply === '...' || callState !== 'connected') return;
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(callerReply);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      utterance.volume = 1.0;
+
+      const voices = window.speechSynthesis.getVoices();
+      const indianVoice = voices.find(v => v.lang.includes('IN') || v.lang.startsWith('hi') || v.lang.startsWith('mr')) ||
+                          voices.find(v => v.lang.startsWith('en'));
+      if (indianVoice) {
+        utterance.voice = indianVoice;
+      }
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [callerReply, callState]);
 
   // Format call duration MM:SS
   const formatDuration = (seconds: number) => {

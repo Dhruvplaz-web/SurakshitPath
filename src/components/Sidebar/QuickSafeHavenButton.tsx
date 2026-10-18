@@ -302,8 +302,8 @@ export const QuickSafeHavenButton: React.FC<Props> = ({
           onClick={() => {
             onLockSafeHaven(closestHaven);
             setDivertSuccess(true);
-            const msg = `🚨 *SURAKSHITPATH EMERGENCY SHELTER DIVERT*\nI am diverting immediately to a verified refuge:\n\n🏢 *${closestHaven.name}*\n📍 ${closestHaven.address}\n⏱️ Distance: ${distanceMeters}m (~${walkingEtaMinutes} min walk)\n🌐 Live Location: https://maps.google.com/?q=${currentCoordinates[0]},${currentCoordinates[1]}\n\nEmergency Sentinel Contact: +91 96651 84535`;
-            window.open(`https://wa.me/919665184535?text=${encodeURIComponent(msg)}`, '_blank');
+            const msg = `🚨 *SURAKSHITPATH EMERGENCY SHELTER DIVERT*\nI am diverting immediately to a verified refuge:\n\n🏢 *${closestHaven.name}*\n📍 ${closestHaven.address}\n⏱️ Distance: ${distanceMeters}m (~${walkingEtaMinutes} min walk)\n🌐 Live Location: https://maps.google.com/?q=${currentCoordinates[0]},${currentCoordinates[1]}\n\nEmergency Helpline: 112 (National Emergency Support)`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
             try {
               if ('speechSynthesis' in window) {
                 const u = new SpeechSynthesisUtterance(`Emergency haven divert engaged. Rerouting to ${closestHaven.name}.`);

@@ -1,0 +1,20 @@
+Designator,Component Description,Manufacturer,Manufacturer Part Number (MPN),Footprint,Package,Qty,Estimated Unit Cost (INR),Recommended Vendor
+U1,32-bit ARM Cortex-M4F BLE 5.3 SoC (1MB Flash / 256KB RAM),Nordic Semiconductor,nRF52840-QIAA-R,aQFN-73 (7.0x7.0mm),QFN-73,1,₹340.00,Mouser / DigiKey / LCSC
+Q1,Ambient Light Phototransistor (570nm Peak Sensor),Vishay Intertechnology,TEMT6200FX01,0805 SMD (2.0x1.25mm),0805,1,₹28.50,LCSC / Mouser
+SW1,Ultra-Thin Tactile Micro-Switch (0.65mm Height / Silent Squeeze),C&K / Littelfuse,KMT011NGJLHS,SMD Ultra-Miniature,SMD,1,₹18.00,DigiKey / LCSC
+J1,Magnetic Pogo Breakaway Interlock Clasp (Closed Circuit Loop),Harwin / Mill-Max,M80-4000000,SMD Surface Mount,SMD,1,₹45.00,Robu.in / LCSC
+BT1,SMD Coin Cell Battery Retainer for CR1632 (3.0V Lithium),Keystone Electronics,2896,SMD 16mm Retainer,SMD,1,₹32.00,DigiKey / Mouser
+Y1,32.000 MHz High-Precision RF Crystal Oscillator (±10ppm),Murata,XRCGB32M000F1H00R0,2016 SMD (2.0x1.6mm),SMD,1,₹16.50,LCSC / Murata
+Y2,32.768 kHz Low-Power Real-Time Clock Crystal,Epson,FC-135 32.7680KA-A0,3215 SMD (3.2x1.5mm),SMD,1,₹14.00,LCSC / Epson
+ANT1,2.4GHz Ceramic Chip Antenna (Omnidirectional 1.5dBi Gain),Johanson Technology,2450AT18A100E,1206 SMD (3.2x1.6mm),1206,1,₹22.00,LCSC / DigiKey
+C1,Ceramic Capacitor 100nF 16V X7R Decoupling,Murata,GRM033R71C104KE14D,0201 SMD,0201,4,₹3.20,LCSC / Robu.in
+C2,Ceramic Capacitor 1.0uF 10V X5R VDD Smoothing,Murata,GRM033R61A105ME15D,0201 SMD,0201,2,₹4.50,LCSC / Robu.in
+C3,Load Capacitor 12pF 50V C0G (For 32MHz Crystal),Murata,GRM0335C1H120GA01D,0201 SMD,0201,2,₹2.80,LCSC / Robu.in
+C4,Load Capacitor 9pF 50V C0G (For 32.768kHz Crystal),Murata,GRM0335C1H9R0BA01D,0201 SMD,0201,2,₹2.80,LCSC / Robu.in
+L1,RF Matching Inductor 3.9nH High-Q,Murata,LQW15AN3N9B00D,0402 SMD,0402,1,₹6.50,LCSC / Murata
+L2,RF Matching Inductor 4.7nH High-Q,Murata,LQW15AN4N7B00D,0402 SMD,0402,1,₹6.50,LCSC / Murata
+R1,Pull-Up Resistor 100k Ohm 1% 1/16W (Breakaway Interlock),Yageo,RC0201FR-07100KL,0201 SMD,0201,1,₹1.50,LCSC / Robu.in
+R2,Current Limiting Resistor 10k Ohm 1% 1/16W (Phototransistor),Yageo,RC0201FR-0710KL,0201 SMD,0201,1,₹1.50,LCSC / Robu.in
+D1,TVS ESD Protection Diode for Antenna / Clasp,Texas Instruments,TPD1E10B06DPYR,0402 SMD (X1SON),0402,2,₹11.00,Mouser / TI
+ENC1,Ultra-Compact Injection-Molded Polycarbonate Enclosure (25x15x6mm IP67),Custom Tooling,SK-ENC-01,Custom 2.5x1.5cm,Enclosure,1,₹85.00,Local Pune Tooling / JLCPCB 3D
+TOTAL,-,-,-,-,-,25,₹638.00,-

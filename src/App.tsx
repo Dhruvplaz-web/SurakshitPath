@@ -70,7 +70,7 @@ export const App: React.FC = () => {
     const betaParam = isNaN(betaRaw) ? 0.8 : Math.max(0.0, Math.min(1.5, betaRaw));
     
     const rawRoute = params.get('route') || 'route_safe';
-    const routeParam = ['route_safe', 'route_fastest', 'route_balanced'].includes(rawRoute) ? rawRoute : 'route_safe';
+    const routeParam = ['route_safe', 'route_fastest', 'route_balanced', 'route_transit'].includes(rawRoute) ? rawRoute : 'route_safe';
     
     const originParam = params.get('origin');
     const destParam = params.get('dest');
@@ -153,7 +153,7 @@ export const App: React.FC = () => {
     const defaultDest = PUNE_LANDMARKS[13] || PUNE_LANDMARKS[1];
 
     const originLoc = originParam ? resolveLocation(originParam, defaultOrigin) : defaultOrigin;
-    const destLoc = destParam ? resolveLocation(destParam, defaultDest) : defaultDest;
+    const destLoc = destParam ? resolveLocation(destParam, defaultDest) : null;
 
     const isTrackingParam = window.location.pathname.startsWith('/track') || params.get('mode') === 'track';
     const tripIdParam = params.get('trip') || (window.location.pathname.startsWith('/track/') ? window.location.pathname.replace('/track/', '') : 'tr_89f2a41d');
@@ -191,7 +191,7 @@ export const App: React.FC = () => {
   const [trackingTripId] = useState<string>(initialParams.tripId);
   const [currentLanguage, setCurrentLanguage] = useState<AppLanguage>(initialParams.lang);
   const [origin, setOrigin] = useState<PuneLocation>(initialParams.origin);
-  const [destination, setDestination] = useState<PuneLocation>(initialParams.destination);
+  const [destination, setDestination] = useState<PuneLocation | null>(initialParams.destination);
   const [beta, setBeta] = useState<number>(initialParams.beta);
   const [activeRouteId, setActiveRouteId] = useState<string>(initialParams.route);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -333,16 +333,21 @@ export const App: React.FC = () => {
   };
 
   // Auto-acquire user's live GPS location on startup if origin was explicitly requested as GPS
+  // Auto-detect user's live pan-India GPS location on initial launch
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlOrigin = params.get('origin');
-    if (urlOrigin === 'gps' || urlOrigin === 'gps_my_location') {
+    if (!urlOrigin || urlOrigin === 'gps' || urlOrigin === 'gps_my_location') {
       getUserCurrentLocation()
         .then(loc => {
           setOrigin(loc);
+          setTelemetry(prev => ({
+            ...prev,
+            currentPosition: loc.coordinates
+          }));
         })
         .catch(err => {
-          console.log('GPS waiting for user trigger/permission:', err);
+          console.log('[SurakshitPath] GPS waiting for user permission or defaulted to landmark:', err);
         });
     }
   }, []);
@@ -356,18 +361,36 @@ export const App: React.FC = () => {
     params.set('route', activeRouteId);
     params.set('profile', travelProfile);
     params.set('origin', origin.id);
-    params.set('dest', destination.id);
+    if (destination) { params.set('dest', destination.id); } else { params.delete('dest'); }
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
   }, [userRole, currentLanguage, beta, activeRouteId, origin, destination, travelProfile]);
 
   // Calculate Pune & Maharashtra routes: initialized immediately with local road-aligned geometry,
   // then asynchronously upgraded with live OpenStreetMap OSRM real-road geometry
-  const [routes, setRoutes] = useState<{ fastest: RouteOption; safe: RouteOption; balanced: RouteOption }>(() => {
-    return calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile);
+  const [routes, setRoutes] = useState<{ fastest: RouteOption; safe: RouteOption; balanced: RouteOption; transit?: RouteOption } | null>(() => {
+    if (!initialParams.destination) return null;
+    return calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, initialParams.destination.coordinates, travelProfile);
   });
 
   useEffect(() => {
+    if (!destination) {
+      setRoutes(null);
+      return;
+    }
+
     let isCancelled = false;
+
+    // Smart Inter-City & Long-Distance Mode Switcher (eliminates walking 1500+ mins bug)
+    const dLat = (destination.coordinates[0] - origin.coordinates[0]) * 111139;
+    const dLng = (destination.coordinates[1] - origin.coordinates[1]) * 105000;
+    const distKm = Math.sqrt(dLat * dLat + dLng * dLng) / 1000;
+    if (distKm > 8 && travelProfile === 'pedestrian') {
+      setTravelProfile('two_wheeler');
+      audioGuidance.speakSafetyCue(
+        `Long-distance commute detected (${distKm.toFixed(0)} kilometers). Switched to Two-Wheeler travel profile for realistic navigation.`,
+        false
+      );
+    }
 
     // Immediately provide local road-aligned routes
     const immediateRoutes = calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile);
@@ -419,20 +442,38 @@ export const App: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile, weatherProfile]);
+  }, [beta, dynamicEvents, origin.coordinates, destination?.coordinates, travelProfile, weatherProfile]);
 
-  // Active Route
+  const emptyRoute: RouteOption = useMemo(() => ({
+    id: 'route_radar',
+    name: 'Safe Radar Aura Active',
+    tagline: 'Centered on your live location',
+    routeType: 'safe',
+    distanceMeters: 0,
+    durationMinutes: 0,
+    safetyScore: 100,
+    betaUsed: 0.8,
+    factors: { lighting: 1, activity: 1, transit: 1, emergency: 1, incidentPenalty: 0, compositeScore: 100 },
+    coordinates: [],
+    segments: [],
+    reasons: ['Map centered on your live location. Select a destination to calculate illuminated safe corridors.']
+  }), []);
+
+  // Active Route (Supports all 4 modular engines: Safest, SwiftSafe, Fastest, Transit)
   const activeRoute: RouteOption = useMemo(() => {
+    if (!destination || !routes) return emptyRoute;
     if (activeRouteId === 'route_fastest') return routes.fastest;
     if (activeRouteId === 'route_balanced') return routes.balanced;
+    if (activeRouteId === 'route_transit' && routes.transit) return routes.transit;
     return routes.safe;
-  }, [activeRouteId, routes]);
+  }, [activeRouteId, routes, destination, emptyRoute]);
 
   // Alternative Routes
   const alternativeRoutes = useMemo(() => {
-    const all = [routes.safe, routes.fastest, routes.balanced];
+    if (!destination || !routes) return [];
+    const all = [routes.safe, routes.fastest, routes.balanced, ...(routes.transit ? [routes.transit] : [])];
     return all.filter(r => r.id !== activeRoute.id);
-  }, [routes, activeRoute.id]);
+  }, [routes, activeRoute.id, destination]);
 
   // Set default selected edge when active route changes
   useEffect(() => {
@@ -537,13 +578,13 @@ export const App: React.FC = () => {
             currentPosition: smoothedPos,
             speedKmh,
             crossTrackDistanceMeters: crossTrack,
-            isDeviated: crossTrack > 50,
+            isDeviated: crossTrack > 85,
             isStationary,
             dwellTimeSeconds: newDwell
           };
         });
 
-        if (crossTrack > 50 && !anomalyState.isOpen) {
+        if (crossTrack > 85 && !anomalyState.isOpen) {
           triggerAnomalyCheck('deviation');
         }
       },
@@ -560,7 +601,7 @@ export const App: React.FC = () => {
   // Stationary Dwell Anomaly Watchdog: 180s (3 minutes) in isolated segment
   useEffect(() => {
     if (!isLiveGpsActive || anomalyState.isOpen) return;
-    if (telemetry.isStationary && telemetry.dwellTimeSeconds >= 180) {
+    if (telemetry.isStationary && telemetry.dwellTimeSeconds >= 240) {
       triggerAnomalyCheck('stationary');
     }
   }, [isLiveGpsActive, telemetry.isStationary, telemetry.dwellTimeSeconds, anomalyState.isOpen, triggerAnomalyCheck]);
@@ -615,9 +656,11 @@ export const App: React.FC = () => {
 
   // Location Handlers
   const handleSwapLocations = () => {
-    const temp = origin;
-    setOrigin(destination);
-    setDestination(temp);
+    if (destination) {
+      const temp = origin;
+      setOrigin(destination);
+      setDestination(temp);
+    }
   };
 
   const handleMapPickLocation = async (target: 'origin' | 'destination', coords: [number, number]) => {
@@ -738,7 +781,7 @@ export const App: React.FC = () => {
           onOpenAbout={() => setIsAboutOpen(true)}
           onOpenContact={() => setIsContactOpen(true)}
           originName={origin.name}
-          destinationName={destination.name}
+          destinationName={destination ? destination.name : 'Destination'}
         />
       </div>
     );
@@ -998,39 +1041,66 @@ export const App: React.FC = () => {
                 </div>
               )}
 
-              {/* Section 1: Route Alternatives */}
-              <section className="sidebar-section">
-                <div className="section-label">
-                  <span>Candidate Routes Comparison</span>
-                </div>
-                <ErrorBoundary fallbackTitle="Route Comparison Error">
-                  <RouteComparisonCard
-                    routes={routes}
-                    activeRouteId={activeRouteId}
-                    onSelectRoute={(id) => {
-                      setActiveRouteId(id);
-                      const selRoute = id === 'route_fastest' ? routes.fastest : id === 'route_balanced' ? routes.balanced : routes.safe;
-                      audioGuidance.speakSafetyCue(`Switched to ${selRoute.name}. Safety score: ${selRoute.safetyScore} out of 100.`);
-                    }}
-                    onOpenShelters={() => setIsSheltersModalOpen(true)}
-                    onOpenRideShield={() => setIsCabShieldOpen(true)}
-                    currentLanguage={currentLanguage}
-                  />
-                </ErrorBoundary>
-              </section>
+              {/* Section 1: Route Alternatives (When Destination Selected) or Safe Radar View */}
+              {routes && destination ? (
+                <section className="sidebar-section">
+                  <div className="section-label">
+                    <span>Candidate Routes Comparison</span>
+                  </div>
+                  <ErrorBoundary fallbackTitle="Route Comparison Error">
+                    <RouteComparisonCard
+                      routes={routes}
+                      activeRouteId={activeRouteId}
+                      onSelectRoute={(id) => {
+                        setActiveRouteId(id);
+                        const selRoute = id === 'route_fastest' ? routes.fastest : id === 'route_balanced' ? routes.balanced : id === 'route_transit' && routes.transit ? routes.transit : routes.safe;
+                        audioGuidance.speakSafetyCue(`Switched to ${selRoute.name}. Safety score: ${selRoute.safetyScore} out of 100.`);
+                      }}
+                      onOpenShelters={() => setIsSheltersModalOpen(true)}
+                      onOpenRideShield={() => setIsCabShieldOpen(true)}
+                      currentLanguage={currentLanguage}
+                    />
+                  </ErrorBoundary>
+                </section>
+              ) : (
+                <section className="sidebar-section">
+                  <div style={{
+                    padding: '16px',
+                    backgroundColor: 'var(--surface-elevated)',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-subtle)',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '18px' }}>🛡️</span>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--safe-emerald)' }}>
+                        Live GPS Safety Radar Active
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      Map is focused on your live device location with a 500m safe aura. Nearby 24/7 police chowkis, women crisis shelters, and emergency hospitals are monitored on your map.
+                    </p>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-amber)', marginTop: '8px' }}>
+                      👆 Search or tap a destination above to calculate safe illuminated routes.
+                    </div>
+                  </div>
+                </section>
+              )}
 
-              {/* Ride Shield Card — Safety-aware cab journey assistant */}
-              <section className="sidebar-section">
-                <ErrorBoundary fallbackTitle="Ride Shield Error">
-                  <RideShieldCard
-                    activeRoute={activeRoute}
-                    origin={origin}
-                    destination={destination}
-                    onOpenRideShield={() => setIsCabShieldOpen(true)}
-                    currentLanguage={currentLanguage}
-                  />
-                </ErrorBoundary>
-              </section>
+              {/* Ride Shield Card — Safety-aware cab journey assistant (when destination chosen) */}
+              {destination && (
+                <section className="sidebar-section">
+                  <ErrorBoundary fallbackTitle="Ride Shield Error">
+                    <RideShieldCard
+                      activeRoute={activeRoute}
+                      origin={origin}
+                      destination={destination}
+                      onOpenRideShield={() => setIsCabShieldOpen(true)}
+                      currentLanguage={currentLanguage}
+                    />
+                  </ErrorBoundary>
+                </section>
+              )}
 
               {/* Section 2: Quick Action Police Station & Safe Haven Lock */}
               <section className="sidebar-section" style={{ paddingTop: '4px', paddingBottom: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1073,7 +1143,7 @@ export const App: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className="brand-badge" style={{ fontSize: '10px', textTransform: 'none' }}>
-                      {beta >= 1.0 ? '🛡️ Max Safe' : beta >= 0.6 ? '✨ High Safe' : beta >= 0.2 ? '⚖️ Balanced' : '⚡ Fastest'}
+                      {activeRouteId === 'route_safe' ? '🛡️ Max Shield' : activeRouteId === 'route_balanced' ? '⚡ Swift & Safe' : activeRouteId === 'route_transit' ? '🚌 Transit' : '⏱️ Fastest'}
                     </span>
                     <ChevronDown size={14} style={{ transform: isBetaOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
                   </div>
@@ -1082,7 +1152,7 @@ export const App: React.FC = () => {
                 {isBetaOpen && (
                   <div className="accordion-body">
                     <ErrorBoundary fallbackTitle="Slider Error">
-                      <SafetySlider beta={beta} onBetaChange={setBeta} currentLanguage={currentLanguage} />
+                      <SafetySlider beta={beta} onBetaChange={setBeta} currentLanguage={currentLanguage} activeRouteId={activeRouteId} onSelectRouteId={setActiveRouteId} />
                     </ErrorBoundary>
                   </div>
                 )}
@@ -1247,7 +1317,7 @@ export const App: React.FC = () => {
         isOpen={isShareModalOpen}
         activeRoute={activeRoute}
         origin={origin}
-        destination={destination}
+        destination={destination || origin}
         onClose={() => setIsShareModalOpen(false)}
       />
 
@@ -1276,7 +1346,7 @@ export const App: React.FC = () => {
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
         originName={origin.name}
-        destinationName={destination.name}
+        destinationName={destination ? destination.name : 'Destination'}
       />
 
       {/* Zero-Ad Privacy & Essential Storage Consent Banner */}
@@ -1325,7 +1395,7 @@ export const App: React.FC = () => {
         isOpen={isCabShieldOpen}
         onClose={() => setIsCabShieldOpen(false)}
         origin={origin}
-        destination={destination}
+        destination={destination || origin}
         activeRoute={activeRoute}
         telemetry={telemetry}
         onTripCompleted={() => setIsFeedbackOpen(true)}
@@ -1339,7 +1409,7 @@ export const App: React.FC = () => {
         onClose={() => setIsFeedbackOpen(false)}
         onOpenHazardReport={() => setIsReportModalOpen(true)}
         routeName={activeRoute.name}
-        destinationName={destination.name}
+        destinationName={destination ? destination.name : 'Destination'}
       />
 
       {/* Ground-Level Street Audit 360° Modal */}

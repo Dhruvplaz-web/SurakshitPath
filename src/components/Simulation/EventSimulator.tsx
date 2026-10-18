@@ -21,7 +21,7 @@ export const EventSimulator: React.FC<Props> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
           <AlertTriangle size={14} color="var(--accent-amber)" />
-          <span>Real-Time Event Simulator</span>
+          <span>PS-20 Real-Time Event Simulator</span>
         </div>
 
         {(isBlackoutActive || isCrowdAlertActive) && (

@@ -49,17 +49,10 @@ const STORAGE_KEY_GUARDIANS = 'surakshit_trusted_guardians';
 export function getStoredGuardians(): TrustedGuardian[] {
   const defaultGuardians: TrustedGuardian[] = [
     {
-      id: 'g_primary_dhruv',
-      name: 'Dhruv',
-      phone: '+91 96651 84535',
-      relationship: 'Primary',
-      notifyOnTripStart: true
-    },
-    {
-      id: 'g_default_1',
-      name: 'Papa',
-      phone: '+91 98220 12345',
-      relationship: 'Father',
+      id: 'g_default_primary',
+      name: 'Family Contact',
+      phone: '+91 98000 00000',
+      relationship: 'Primary Guardian',
       notifyOnTripStart: true
     }
   ];
@@ -68,15 +61,13 @@ export function getStoredGuardians(): TrustedGuardian[] {
     const raw = localStorage.getItem(STORAGE_KEY_GUARDIANS);
     if (raw) {
       const parsed: TrustedGuardian[] = JSON.parse(raw);
-      // Clean names and relationships of old parentheses bloat
-      const cleaned = parsed.map(g => ({
-        ...g,
-        name: g.name.replace(/\s*\(.*?\)\s*/g, '').trim() || g.name,
-        relationship: g.relationship.replace(/\s+Guardian/i, '').trim() || g.relationship
-      }));
-      const hasUserNumber = cleaned.some(g => g.phone.replace(/\D/g, '').includes('9665184535'));
-      if (hasUserNumber) return cleaned;
-      return [defaultGuardians[0], ...cleaned.slice(0, 2)];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(g => ({
+          ...g,
+          name: g.name.replace(/\s*\(.*?\)\s*/g, '').trim() || g.name,
+          relationship: g.relationship.replace(/\s+Guardian/i, '').trim() || g.relationship
+        }));
+      }
     }
   } catch (err) {
     console.warn('Could not read stored guardians:', err);
@@ -85,9 +76,6 @@ export function getStoredGuardians(): TrustedGuardian[] {
   return defaultGuardians;
 }
 
-/**
- * Saves trusted guardians to persistent storage
- */
 export function saveStoredGuardians(guardians: TrustedGuardian[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_GUARDIANS, JSON.stringify(guardians));

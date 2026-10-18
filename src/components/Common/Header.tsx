@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Moon, Sun, Volume2, VolumeX, Share2, AlertTriangle, User, LogOut, ChevronDown, Shield, HeartHandshake, Building, Users, RefreshCw, Menu, X, CloudRain, SunMedium, CloudFog } from 'lucide-react';
+import { Moon, Sun, Volume2, VolumeX, User, LogOut, ChevronDown, Shield, HeartHandshake, Building, Users, RefreshCw, Menu, X, CloudRain, SunMedium, CloudFog, ShieldAlert } from 'lucide-react';
 import { UserRole, AppLanguage, SafeHaven } from '../../types/routing';
 import { getTranslation } from '../../services/localizationService';
 import { LanguageDropdown } from './LanguageDropdown';
 import { SheltersDropdown, ShelterCategoryOption } from './SheltersDropdown';
 import { NecessityDropdown } from './NecessityDropdown';
+import { SafetyToolsDropdown } from './SafetyToolsDropdown';
 import { NocturnalWeatherCard, WeatherMode, WeatherRiskProfile, WEATHER_PROFILES } from '../Commuter/NocturnalWeatherCard';
 import { PuneLocation } from '../../services/geocodingService';
 import { useAuth } from '../../context/AuthContext';
@@ -46,6 +47,7 @@ export const Header: React.FC<Props> = ({
   onOpenCabShield,
   onOpenShelters,
   onOpenFakeCall,
+  onOpenKavachCockpit,
   onLockSafeHaven,
   currentCoordinates,
   userCoordinates,
@@ -152,55 +154,15 @@ export const Header: React.FC<Props> = ({
           currentLanguage={currentLanguage}
         />
 
-        {/* Quick Report Hazard Button */}
-        {onOpenReportModal && (
-          <button
-            onClick={onOpenReportModal}
-            className="btn-civic btn-hazard-pill"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              fontSize: '11px',
-              fontWeight: 700,
-              backgroundColor: 'var(--danger-crimson-subtle)',
-              color: 'var(--danger-crimson)',
-              border: '1px solid var(--danger-crimson)',
-              borderRadius: 'var(--radius-full)',
-              flexShrink: 0
-            }}
-            title="Report Dark Spot, Broken Streetlight or Hazard"
-          >
-            <AlertTriangle size={13} />
-            <span className="btn-label">{t.reportHazard}</span>
-          </button>
-        )}
-
-        {/* Quick Share Pass Button */}
-        {onOpenShareModal && (
-          <button
-            onClick={onOpenShareModal}
-            className="btn-civic"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              fontSize: '11px',
-              fontWeight: 700,
-              backgroundColor: 'var(--accent-amber-subtle)',
-              color: 'var(--accent-amber)',
-              border: '1px solid var(--accent-amber)',
-              borderRadius: 'var(--radius-full)',
-              flexShrink: 0
-            }}
-            title="Share Live Safe Route Pass with Family / Guardian"
-          >
-            <Share2 size={13} />
-            <span className="btn-label">{t.sharePass}</span>
-          </button>
-        )}
+        {/* Unified Safety & Emergency Protection Suite Dropdown */}
+        <SafetyToolsDropdown
+          onOpenReportModal={onOpenReportModal}
+          onOpenShareModal={onOpenShareModal}
+          onOpenFakeCall={onOpenFakeCall}
+          onOpenCabShield={onOpenCabShield}
+          onOpenKavachCockpit={onOpenKavachCockpit}
+          currentLanguage={currentLanguage}
+        />
 
         {/* Divider between quick actions and utilities */}
         <div className="header-divider" />
@@ -582,6 +544,37 @@ export const Header: React.FC<Props> = ({
           >
             <User size={13} />
             <span className="btn-label">Login / Select Role</span>
+          </button>
+        )}
+
+        {/* Prominent Desktop Header SOS 112 Trigger */}
+        {onOpenSos && (
+          <button
+            type="button"
+            onClick={onOpenSos}
+            className="btn-civic btn-header-sos"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              backgroundColor: 'var(--danger-crimson, #ef4444)',
+              color: '#ffffff',
+              border: '1px solid #f87171',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '11px',
+              fontWeight: 900,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+              boxShadow: '0 0 14px rgba(239, 68, 68, 0.45)',
+              flexShrink: 0,
+              transition: 'all 0.15s ease'
+            }}
+            title="Instant 1-Tap Emergency SOS (112, Police, Siren, Fake Call)"
+            aria-label="Instant 1-Tap Emergency SOS"
+          >
+            <ShieldAlert size={14} />
+            <span>SOS 112</span>
           </button>
         )}
       </div>

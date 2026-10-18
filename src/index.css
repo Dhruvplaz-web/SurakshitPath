@@ -425,28 +425,32 @@ body {
 }
 
 .gmaps-travel-modes {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
   margin-bottom: 12px;
 }
 
 .gmaps-mode-tab {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
-  padding: 6px 10px;
-  border-radius: var(--radius-full);
+  padding: 6px 4px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.18s ease;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .gmaps-mode-tab:hover {
@@ -457,7 +461,9 @@ body {
 .gmaps-mode-tab.active {
   color: var(--accent-amber);
   background: var(--accent-amber-subtle);
+  border-color: rgba(245, 158, 11, 0.35);
   font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .gmaps-inputs-container {
@@ -1211,9 +1217,14 @@ body {
   }
 }
 
+/* Nocturnal High-Contrast Map Cartography (Zero Watermark, 100% Free) */
+.dark-mode-tiles {
+  filter: brightness(0.7) invert(1) contrast(1.4) hue-rotate(200deg) saturate(0.35);
+}
+
 /* Mobile Drag Handle Bar on Bottom Sheet */
 .mobile-sheet-drag-handle-bar {
-  display: none;
+  display: none !important;
 }
 
 /* ==========================================================================
@@ -1801,5 +1812,12 @@ body {
 
 .mobile-bottom-peek-card {
   display: none;
+}
+
+/* On desktop (>960px): Top header contains prominent SOS 112 trigger, so hide the floating corner button to prevent map/attribution collisions */
+@media (min-width: 961px) {
+  .floating-sos-container {
+    display: none !important;
+  }
 }
 

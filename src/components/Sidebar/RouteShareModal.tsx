@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { RouteOption } from '../../types/routing';
 import { PuneLocation } from '../../services/geocodingService';
 import { ShieldCheck, Share2, Copy, Check, MessageSquare, X } from 'lucide-react';
@@ -20,54 +20,30 @@ export const RouteShareModal: React.FC<Props> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
-  const tripId = `tr_${Date.now().toString(36)}`;
-  const liveTrackingUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/?mode=track&trip=${tripId}&route=${activeRoute.id}&origin=${origin.id}&dest=${destination.id}&role=guardian`
-    : '';
-
-  const shareText = `🛡️ SurakshitPath Live Night Travel Trail:
-I am traveling from ${origin.name} to ${destination.name} via ${activeRoute.name}.
-Safety Index: ${activeRoute.safetyScore}/100 | Illumination: ${Math.round(activeRoute.factors.lighting * 100)}%
-Click to open Live Guardian Companion (Zero-Install):
-${liveTrackingUrl}`;
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const shareText = `🛡️ SurakshitPath Live Night Route:
+Traveling from ${origin.name} to ${destination.name} via ${activeRoute.name}.
+Safety Score: ${activeRoute.safetyScore}/100 | Illumination: ${Math.round(activeRoute.factors.lighting * 100)}%
+Live Corridor Link: ${currentUrl}`;
 
   const handleCopyLink = () => {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(liveTrackingUrl);
+      navigator.clipboard.writeText(currentUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   const handleWhatsAppShare = () => {
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   return (
-    <div
-      className="modal-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="share-pass-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', textAlign: 'left' }}>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="share-pass-title">
+      <div className="modal-dialog" style={{ maxWidth: '420px', textAlign: 'left' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
@@ -154,7 +130,7 @@ ${liveTrackingUrl}`;
           }}>
             <span>Illumination: {Math.round(activeRoute.factors.lighting * 100)}%</span>
             <span>Havens En Route: {activeRoute.segments.length > 3 ? '4' : '2'} Verified</span>
-            <span>Live Guardian Sync: Active</span>
+            <span>Live Watchdog: Active</span>
           </div>
         </div>
 

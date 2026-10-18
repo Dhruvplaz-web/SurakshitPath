@@ -1,4 +1,4 @@
-import { getKnownSafeHavensSync } from './liveShelterService';
+import { PUNE_SAFE_HAVENS } from '../data/safeHavens';
 import { PUNE_NODES, PUNE_EDGES } from '../data/puneCorridorGraph';
 import { SafeHaven } from '../types/routing';
 
@@ -40,14 +40,13 @@ class OfflineRoutingStore {
 
   public async syncOfflinePack(): Promise<OfflineStatus> {
     const nodesList = Object.values(PUNE_NODES);
-    const havensList = getKnownSafeHavensSync();
 
     if (!this.dbPromise) {
       return {
         isCached: true,
         cachedNodesCount: nodesList.length,
         cachedEdgesCount: PUNE_EDGES.length,
-        cachedHavensCount: havensList.length,
+        cachedHavensCount: PUNE_SAFE_HAVENS.length,
         lastUpdated: new Date().toLocaleTimeString()
       };
     }
@@ -59,14 +58,14 @@ class OfflineRoutingStore {
 
       store.put({ key: 'nodes', data: nodesList });
       store.put({ key: 'edges', data: PUNE_EDGES });
-      store.put({ key: 'safe_havens', data: havensList });
+      store.put({ key: 'safe_havens', data: PUNE_SAFE_HAVENS });
       store.put({ key: 'meta', timestamp: Date.now() });
 
       return {
         isCached: true,
         cachedNodesCount: nodesList.length,
         cachedEdgesCount: PUNE_EDGES.length,
-        cachedHavensCount: havensList.length,
+        cachedHavensCount: PUNE_SAFE_HAVENS.length,
         lastUpdated: new Date().toLocaleTimeString()
       };
     } catch {
@@ -74,14 +73,14 @@ class OfflineRoutingStore {
         isCached: true,
         cachedNodesCount: nodesList.length,
         cachedEdgesCount: PUNE_EDGES.length,
-        cachedHavensCount: havensList.length,
+        cachedHavensCount: PUNE_SAFE_HAVENS.length,
         lastUpdated: new Date().toLocaleTimeString()
       };
     }
   }
 
   public async getOfflineHavens(): Promise<SafeHaven[]> {
-    return getKnownSafeHavensSync();
+    return PUNE_SAFE_HAVENS;
   }
 }
 

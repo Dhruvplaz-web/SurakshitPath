@@ -34,7 +34,6 @@ export const ConsentBanner: React.FC<Props> = ({ onOpenCookiePolicy, onOpenPriva
   return (
     <aside
       aria-label="Privacy and Storage Consent"
-      className="consent-banner-fixed"
       style={{
         position: 'fixed',
         bottom: '50px',

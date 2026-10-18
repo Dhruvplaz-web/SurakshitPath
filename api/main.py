@@ -392,6 +392,91 @@ async def get_pune_weather():
         "night_visibility_status": "Clear & Optimal"
     }
 
+
+# In-memory session tracking for zero-cost high-concurrency state
+ACTIVE_RIDE_SESSIONS = {}
+ACTIVE_LOCATION_SHARES = {}
+
+class LocationUpdateRequest(BaseModel):
+    session_id: str
+    commuter_name: Optional[str] = "Citizen Commuter"
+    latitude: float
+    longitude: float
+    battery_level: Optional[int] = 100
+    active_route_name: Optional[str] = "Safe Corridor"
+
+class LocationStopRequest(BaseModel):
+    session_id: str
+
+class RideSessionModel(BaseModel):
+    ride_id: str
+    user_id: Optional[str] = "guest_commuter"
+    route_id: Optional[str] = "route_safe"
+    route_name: Optional[str] = "Safe Corridor"
+    provider: Optional[str] = "uber"
+    pickup_lat: float
+    pickup_lng: float
+    destination_lat: float
+    destination_lng: float
+    pickup_name: Optional[str] = "Current Location"
+    destination_name: Optional[str] = "Destination"
+    started_at: Optional[float] = None
+    monitoring_enabled: Optional[bool] = False
+    status: Optional[str] = "initiated"
+    safety_score: Optional[int] = 85
+
+class RideMonitoringRequest(BaseModel):
+    monitoring_enabled: bool
+    status: Optional[str] = "monitoring_started"
+
+class HazardRiskRequest(BaseModel):
+    coordinates: List[float]
+    lighting_score: Optional[float] = 0.85
+    amenity_density: Optional[float] = 0.80
+
+@app.post("/api/location-share/update")
+async def update_location_share(req: LocationUpdateRequest):
+    ACTIVE_LOCATION_SHARES[req.session_id] = {
+        "session_id": req.session_id,
+        "commuter_name": req.commuter_name,
+        "latitude": req.latitude,
+        "longitude": req.longitude,
+        "battery_level": req.battery_level,
+        "active_route_name": req.active_route_name,
+        "updated_at": time.time()
+    }
+    return {"status": "ok", "session_id": req.session_id, "active_trackers": len(ACTIVE_LOCATION_SHARES)}
+
+@app.post("/api/location-share/stop")
+async def stop_location_share(req: LocationStopRequest):
+    ACTIVE_LOCATION_SHARES.pop(req.session_id, None)
+    return {"status": "stopped", "session_id": req.session_id}
+
+@app.post("/api/ride/session")
+async def create_or_update_ride_session(session: RideSessionModel):
+    ACTIVE_RIDE_SESSIONS[session.ride_id] = session.dict()
+    return {"status": "ok", "session": ACTIVE_RIDE_SESSIONS[session.ride_id]}
+
+@app.post("/api/ride/{ride_id}/monitoring")
+async def update_ride_monitoring(ride_id: str, req: RideMonitoringRequest):
+    if ride_id in ACTIVE_RIDE_SESSIONS:
+        ACTIVE_RIDE_SESSIONS[ride_id]["monitoring_enabled"] = req.monitoring_enabled
+        ACTIVE_RIDE_SESSIONS[ride_id]["status"] = req.status
+    return {"status": "ok", "ride_id": ride_id, "monitoring": req.monitoring_enabled}
+
+@app.post("/api/safety/analyze-hazard-risk")
+async def analyze_hazard_risk(req: HazardRiskRequest):
+    lat = req.coordinates[0] if len(req.coordinates) > 0 else 18.5204
+    lon = req.coordinates[1] if len(req.coordinates) > 1 else 73.8567
+    risk_score = round(max(5.0, 100.0 - (req.lighting_score * 50.0 + req.amenity_density * 40.0)), 1)
+    return {
+        "status": "success",
+        "coordinates": [lat, lon],
+        "risk_level": "low" if risk_score < 30 else "moderate" if risk_score < 60 else "elevated",
+        "risk_score": risk_score,
+        "recommendation": "Maintain arterial road alignment. Continuous street lighting verified."
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

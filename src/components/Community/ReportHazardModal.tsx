@@ -334,12 +334,17 @@ export const ReportHazardModal: React.FC<Props> = ({
       }
     }
 
+    const sanitize = (str: string) => str.replace(/[<>'";&]/g, '').trim();
+    const cleanTitle = sanitize(title).slice(0, 120);
+    const cleanDesc = sanitize(description).slice(0, 500);
+    const cleanDetail = category === 'other' ? sanitize(customCategory).slice(0, 100) : undefined;
+
     const newReport: CitizenReport = {
       id: `rep_${Date.now()}`,
       category,
-      otherCategoryDetail: category === 'other' ? customCategory.trim() : undefined,
-      title: title.trim(),
-      description: description.trim() || 'Reported by commuter via SurakshitPath community audit.',
+      otherCategoryDetail: cleanDetail,
+      title: cleanTitle || 'Community Safety Report',
+      description: cleanDesc || 'Reported by commuter via SurakshitPath community audit.',
       coordinates: currentCoordinates,
       reportedAt: Date.now(),
       status: 'verified',

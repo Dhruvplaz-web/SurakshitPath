@@ -17,7 +17,7 @@ import { NavigationCockpitHud } from '../Navigation/NavigationCockpitHud';
 interface Props {
   userRole: UserRole;
   origin: PuneLocation;
-  destination: PuneLocation;
+  destination?: PuneLocation | null;
   activeRoute: RouteOption;
   alternativeRoutes: RouteOption[];
   activeEvents: DynamicEvent[];
@@ -63,10 +63,15 @@ export const MapCockpit: React.FC<Props> = ({
 }) => {
   const t = getTranslation(currentLanguage);
   const [mapStyle, setMapStyle] = useState<MapTileStyle>('google_roads');
-  const [showBoundaries, setShowBoundaries] = useState<boolean>(true);
-  const [showCityLabels, setShowCityLabels] = useState<boolean>(true);
+  const [showBoundaries, setShowBoundaries] = useState<boolean>(false);
+  const [showCityLabels, setShowCityLabels] = useState<boolean>(false);
   const [isLayerMenuOpen, setIsLayerMenuOpen] = useState(false);
   const { havens: liveHavens } = useLiveShelters(origin.coordinates);
+
+  // Synchronize mapStyle with active app theme if not manually overridden
+  useEffect(() => {
+    setMapStyle(theme === 'dark' ? 'carto_dark' : 'google_roads');
+  }, [theme]);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -82,6 +87,7 @@ export const MapCockpit: React.FC<Props> = ({
   const commuterMarkerRef = useRef<L.Marker | null>(null);
 
   const [isNavigating, setIsNavigating] = useState(isLiveNavigating);
+  const [isFollowMe, setIsFollowMe] = useState<boolean>(true);
   const [activeManeuverIndex, setActiveManeuverIndex] = useState(0);
 
   useEffect(() => {
@@ -164,18 +170,17 @@ export const MapCockpit: React.FC<Props> = ({
 
     let newLayer: L.TileLayer;
     if (mapStyle === 'carto_dark') {
-      // CARTO Dark Matter: High-contrast nocturnal safe-routing cartography
-      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
-        maxZoom: 20
+      // High-contrast nocturnal safe-routing dark cartography (100% free, zero watermark)
+      newLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        className: 'dark-mode-tiles',
+        attribution: '&copy; OpenStreetMap contributors · Night Cartography',
+        maxZoom: 19
       });
     } else if (mapStyle === 'carto_voyager') {
-      // CARTO Voyager: Crisp, clean daylight cartography
-      newLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap contributors',
-        maxZoom: 20
+      // High-resolution clean street cartography (ESRI World Street - 100% free, zero watermark)
+      newLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri & OpenStreetMap · Clean Street Map',
+        maxZoom: 19
       });
     } else if (mapStyle === 'google_roads') {
       // Google Maps Standard Roadmap (State/District boundaries, highways, full typography)
@@ -322,7 +327,10 @@ export const MapCockpit: React.FC<Props> = ({
 
     layerGroup.clearLayers();
 
-    liveHavens.forEach((haven: SafeHaven) => {
+    // Render top 12 nearest verified safe havens to prevent dense visual cluster pileups
+    const displayHavens = liveHavens.slice(0, 12);
+
+    displayHavens.forEach((haven: SafeHaven) => {
       let iconSymbol = '🛡️';
       let iconBg = theme === 'dark' ? '#0f172a' : '#ffffff';
       let borderColor = '#3b82f6';
@@ -573,32 +581,50 @@ export const MapCockpit: React.FC<Props> = ({
     `);
     markersGroup.addLayer(originMarker);
 
-    // Modern Destination Marker (B)
-    const destIcon = L.divIcon({
-      className: 'pro-marker-dest',
-      html: `
-        <div style="position:relative; width:34px; height:34px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(245,158,11,0.3); animation:proPulse 2.2s infinite;"></div>
-          <div style="position:relative; background:#f59e0b; border:2.5px solid #ffffff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:#000000; font-size:11px; font-weight:800; box-shadow:0 3px 10px rgba(0,0,0,0.35);">
-            B
-          </div>
-        </div>
-      `,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17]
-    });
-    const destMarker = L.marker(destination.coordinates, { icon: destIcon }).bindPopup(`
-      <div style="font-family:'Inter',sans-serif;">
-        <strong>Destination:</strong> ${destination.name}<br/>
-        <span style="font-size:11px; opacity:0.8;">${destination.subtitle}</span>
-      </div>
-    `);
-    markersGroup.addLayer(destMarker);
+    // Radar Aura Circle & Destination Marker (B)
+    if (!destination || activeRoute.coordinates.length <= 1) {
+      // 500m Safety Radar Aura when in Exploration / Clean Slate Mode
+      const radarCircle = L.circle(origin.coordinates, {
+        radius: 600,
+        color: '#10b981',
+        weight: 1.5,
+        fillColor: '#10b981',
+        fillOpacity: 0.12,
+        dashArray: '4, 6'
+      });
+      radarCircle.bindTooltip('500m Active Safe Radar Aura (Nearby Police & Havens Monitored)', { sticky: true });
+      markersGroup.addLayer(radarCircle);
 
-    // Fit map bounds cleanly to active route when NOT in close-up navigation mode
-    if (activeRoute.coordinates.length > 0 && !isNavigating) {
-      const bounds = L.latLngBounds([origin.coordinates, destination.coordinates, ...activeRoute.coordinates]);
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      if (!isNavigating) {
+        map.setView(origin.coordinates, 15);
+      }
+    } else {
+      const destIcon = L.divIcon({
+        className: 'pro-marker-dest',
+        html: `
+          <div style="position:relative; width:34px; height:34px; display:flex; align-items:center; justify-content:center;">
+            <div style="position:absolute; width:34px; height:34px; border-radius:50%; background:rgba(245,158,11,0.3); animation:proPulse 2.2s infinite;"></div>
+            <div style="position:relative; background:#f59e0b; border:2.5px solid #ffffff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:#000000; font-size:11px; font-weight:800; box-shadow:0 3px 10px rgba(0,0,0,0.35);">
+              B
+            </div>
+          </div>
+        `,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+      });
+      const destMarker = L.marker(destination.coordinates, { icon: destIcon }).bindPopup(`
+        <div style="font-family:'Inter',sans-serif;">
+          <strong>Destination:</strong> ${destination.name}<br/>
+          <span style="font-size:11px; opacity:0.8;">${destination.subtitle}</span>
+        </div>
+      `);
+      markersGroup.addLayer(destMarker);
+
+      // Fit map bounds cleanly to active route
+      if (!isNavigating) {
+        const bounds = L.latLngBounds([origin.coordinates, destination.coordinates, ...activeRoute.coordinates]);
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      }
     }
   }, [userRole, origin, destination, activeRoute, alternativeRoutes, selectedEdgeId, onSelectSegment, theme, isNavigating]);
 
@@ -671,7 +697,7 @@ export const MapCockpit: React.FC<Props> = ({
     });
   }, [activeEvents, citizenReports]);
 
-  // Update Commuter Animated Position Marker
+  // Update Commuter Animated Position Marker & Smooth Follow-Me Camera Pan
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -693,7 +719,43 @@ export const MapCockpit: React.FC<Props> = ({
     } else {
       commuterMarkerRef.current.setLatLng(telemetry.currentPosition);
     }
-  }, [telemetry.currentPosition]);
+
+    // Auto-pan smooth cockpit tracking
+    if (isFollowMe) {
+      map.panTo(telemetry.currentPosition, { animate: true, duration: 0.6 });
+    }
+  }, [telemetry.currentPosition, isFollowMe]);
+
+  // Screen WakeLock: Prevents mobile device screen from dimming/sleeping during live navigation
+  useEffect(() => {
+    let wakeLockSentinel: any = null;
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator && (isNavigating || isLiveNavigating)) {
+        try {
+          wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+        } catch (err) {
+          console.warn('[WakeLock] Screen wake lock unavailable:', err);
+        }
+      }
+    };
+
+    requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (wakeLockSentinel !== null && document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(() => {});
+        wakeLockSentinel = null;
+      }
+    };
+  }, [isNavigating, isLiveNavigating]);
 
   // Synchronize active turn maneuver with commuter's live movement
   useEffect(() => {
@@ -720,11 +782,11 @@ export const MapCockpit: React.FC<Props> = ({
   const handleRecenter = () => {
     const map = mapInstanceRef.current;
     if (!map) return;
-    if (activeRoute.coordinates.length > 0) {
+    if (destination && activeRoute.coordinates.length > 1) {
       const bounds = L.latLngBounds([origin.coordinates, destination.coordinates, ...activeRoute.coordinates]);
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
     } else {
-      map.setView([18.5500, 73.8100], 12);
+      map.setView(origin.coordinates, 16);
     }
   };
 
@@ -822,7 +884,7 @@ export const MapCockpit: React.FC<Props> = ({
               </div>
               {[
                 { id: 'carto_dark', label: '🌙 CARTO Dark Matter', desc: 'Nocturnal safe-routing high-contrast dark tiles' },
-                { id: 'carto_voyager', label: '🧭 CARTO Voyager', desc: 'Modern high-legibility street cartography' },
+                { id: 'carto_voyager', label: '🧭 ESRI World Street', desc: 'Crisp, high-legibility street cartography' },
                 { id: 'google_roads', label: '🗺️ Google Maps Roadmap', desc: 'Standard streets, boundaries & names' },
                 { id: 'google_hybrid', label: '🛰️ Google Satellite Hybrid', desc: 'Photographic imagery + road labels' },
                 { id: 'google_terrain', label: '⛰️ Google Physical Terrain', desc: 'Topographic contours & elevations' },
@@ -935,11 +997,49 @@ export const MapCockpit: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Quick Re-center Button */}
+        {/* Live Follow Me Cockpit Toggle Button */}
+        <button
+          onClick={() => {
+            const nextFollow = !isFollowMe;
+            setIsFollowMe(nextFollow);
+            if (nextFollow) {
+              const map = mapInstanceRef.current;
+              if (map) {
+                map.setView(telemetry.currentPosition, Math.max(map.getZoom(), 16), { animate: true, duration: 0.5 });
+              }
+            }
+          }}
+          className="btn-civic"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 12px',
+            backgroundColor: isFollowMe ? 'rgba(16, 185, 129, 0.18)' : 'var(--surface-elevated)',
+            backdropFilter: 'blur(12px)',
+            border: isFollowMe ? '1.5px solid var(--safe-emerald)' : '1px solid var(--border-subtle)',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: 700,
+            color: isFollowMe ? 'var(--safe-emerald)' : 'var(--text-primary)',
+            boxShadow: isFollowMe ? '0 0 16px rgba(16, 185, 129, 0.35)' : '0 4px 16px rgba(0,0,0,0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          title={isFollowMe ? 'GPS Locked: Auto-panning with your movement' : 'GPS Tracking: Click to lock map on live movement'}
+        >
+          <Compass size={14} color={isFollowMe ? 'var(--safe-emerald)' : 'var(--text-muted)'} />
+          <span>{isFollowMe ? (currentLanguage === 'mr' ? 'फॉलो मी: चालू' : currentLanguage === 'hi' ? 'फॉलो मी: चालू' : 'Follow Me [ON]') : (currentLanguage === 'mr' ? 'फॉलो मी: बंद' : currentLanguage === 'hi' ? 'फॉलो मी: बंद' : 'Follow Me [OFF]')}</span>
+        </button>
+
+        {/* Quick Re-center Route Button */}
         <button
           onClick={handleRecenter}
           className="btn-civic"
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
             padding: '8px 12px',
             backgroundColor: 'var(--surface-elevated)',
             backdropFilter: 'blur(12px)',
@@ -947,16 +1047,14 @@ export const MapCockpit: React.FC<Props> = ({
             borderRadius: '8px',
             fontSize: '11px',
             fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
+            color: 'var(--text-primary)',
             boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
             cursor: 'pointer'
           }}
-          title="Re-center map on Pune Safe Corridor"
+          title="Fit full corridor in view"
         >
-          <Compass size={13} color="var(--safe-emerald)" />
-          <span>{currentLanguage === 'mr' ? 'पुणे कॉरिडॉर' : currentLanguage === 'hi' ? 'पुणे कॉरिडोर' : 'Pune Corridor'}</span>
+          <Compass size={13} color="var(--haven-blue)" />
+          <span>{currentLanguage === 'mr' ? 'मार्ग दृश्य' : currentLanguage === 'hi' ? 'मार्ग दृश्य' : 'Full Route'}</span>
         </button>
       </div>
 

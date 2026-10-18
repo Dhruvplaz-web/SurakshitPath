@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserRole, AppLanguage } from '../../types/routing';
 import { getTranslation } from '../../services/localizationService';
-import { User, Building, Users, ChevronDown, Check } from 'lucide-react';
+import { User, Building, HeartHandshake, Users, ChevronDown, Check } from 'lucide-react';
 
 interface Props {
   currentRole: UserRole;
@@ -30,23 +30,30 @@ export const RoleDropdown: React.FC<Props> = ({
     {
       id: 'commuter',
       title: t.roleCommuter,
-      subtitle: 'Multi-Modal Routes, Weather, SOS & Trusted Guardians',
+      subtitle: 'Safe Route Planning, Voice Guidance & Telemetry',
       icon: <User size={15} color="var(--accent-amber)" />,
-      badge: 'Core'
+      badge: 'Primary'
     },
     {
       id: 'admin',
       title: t.roleAdmin,
-      subtitle: 'Municipal Road Development, Streetlights & Dark-Spots',
+      subtitle: 'Municipal Dark-Spot Audit & SCADA Prioritization',
       icon: <Building size={15} color="var(--haven-blue)" />,
-      badge: 'PMC / PCMC'
+      badge: 'Govt'
+    },
+    {
+      id: 'guardian',
+      title: t.roleGuardian,
+      subtitle: 'Real-Time Cross-Track Geofence & Companion Radar',
+      icon: <HeartHandshake size={15} color="var(--safe-emerald)" />,
+      badge: 'Safety'
     },
     {
       id: 'volunteer',
       title: t.roleVolunteer,
-      subtitle: 'Emergency Safety Responders & Police Damini Squad Liaison',
+      subtitle: 'Citizen Responder Network & Incident Verification',
       icon: <Users size={15} color="#ec4899" />,
-      badge: 'First Responder'
+      badge: 'Community'
     }
   ];
 

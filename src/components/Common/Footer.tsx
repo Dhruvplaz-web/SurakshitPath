@@ -10,6 +10,7 @@ interface Props {
   onOpenContact: () => void;
   originName: string;
   destinationName: string;
+  corridorLabel?: string;
 }
 
 export const Footer: React.FC<Props> = ({
@@ -20,12 +21,12 @@ export const Footer: React.FC<Props> = ({
   onOpenAbout,
   onOpenContact,
   originName,
-  destinationName
+  destinationName,
+  corridorLabel = 'Maharashtra Safe Corridor'
 }) => {
   return (
     <footer
       role="contentinfo"
-      className="civic-footer"
       style={{
         backgroundColor: 'var(--surface-card)',
         borderTop: '1px solid var(--border-subtle)',
@@ -41,9 +42,9 @@ export const Footer: React.FC<Props> = ({
       }}
     >
       {/* Left: Breadcrumbs & Civic Alignment */}
-      <div className="footer-breadcrumbs" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-secondary)' }}>
-          <span style={{ fontWeight: 600, color: 'var(--accent-amber)' }}>Pune Metro Corridor</span>
+          <span style={{ fontWeight: 600, color: 'var(--accent-amber)' }}>{corridorLabel}</span>
           <ChevronRight size={11} />
           <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{originName}</span>
           <ChevronRight size={11} />

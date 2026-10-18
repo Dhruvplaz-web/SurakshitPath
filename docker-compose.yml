@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # ==============================================================================
+  # Primary Enterprise Spatial Database: PostgreSQL 16 + PostGIS 3.4
+  # ==============================================================================
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: surakshit_postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: surakshit_db
+      POSTGRES_USER: surakshit
+      POSTGRES_PASSWORD: surakshit_secure_2026
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U surakshit -d surakshit_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - surakshit_net
+
+  # ==============================================================================
+  # Backend API: FastAPI + PostGIS Engine
+  # ==============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    container_name: surakshit_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://surakshit:surakshit_secure_2026@postgis:5432/surakshit_db
+      ENVIRONMENT: production
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgis:
+        condition: service_healthy
+    networks:
+      - surakshit_net
+
+volumes:
+  postgis_data:
+    driver: local
+
+networks:
+  surakshit_net:
+    driver: bridge

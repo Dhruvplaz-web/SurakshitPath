@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Award, Cpu, MapPin } from 'lucide-react';
+import { X, Award, Shield, Cpu, MapPin } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -58,26 +58,27 @@ export const AboutUsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             backgroundColor: 'var(--surface-elevated)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <img
-              src="/logo.png"
-              alt="SurakshitPath Logo"
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
               style={{
-                width: '38px',
-                height: '38px',
+                width: '32px',
+                height: '32px',
                 borderRadius: '8px',
-                objectFit: 'contain',
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                padding: '2px',
-                border: '1px solid rgba(16, 185, 129, 0.25)'
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent-amber)'
               }}
-            />
+            >
+              <Shield size={18} />
+            </div>
             <div>
               <h2 id="about-title" style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                 About SurakshitPath (सुरक्षितपथ)
               </h2>
-              <div style={{ fontSize: '11px', color: 'var(--safe-emerald)', fontWeight: 600 }}>
-                Safer Routes • Smarter Choices · UN SDGs 5 &amp; 11
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Problem Statement PS-20 · Safe &amp; Smart Communities · UN SDGs 5 &amp; 11
               </div>
             </div>
           </div>
@@ -155,10 +156,10 @@ export const AboutUsModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </ul>
           </section>
 
-          {/* Pune Deployment */}
+          {/* Pune Testbed */}
           <section style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
             <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <MapPin size={14} color="var(--accent-amber)" /> Deployment: Pune Metropolitan Region
+              <MapPin size={14} color="var(--accent-amber)" /> Primary Testbed: Pune Metropolitan Region
             </h3>
             <p style={{ margin: 0, fontSize: '12px' }}>
               The system is calibrated with high-density road geometry and lighting data spanning Tathawade (JSPM, Indira), Hinjawadi Rajiv Gandhi Infotech Park, Baner High Street, Savitribai Phule Pune University (SPPU), Shivajinagar, and Kothrud.

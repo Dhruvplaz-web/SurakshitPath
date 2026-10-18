@@ -1,18 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { RouteOption, AppLanguage } from '../../types/routing';
+import React from 'react';
+import { RouteOption } from '../../types/routing';
 import { predictSafetyWithTreeShap, SafetyFeatureVector, MODEL_BASE_VALUE } from '../../engine/mlSafetyModel';
-import { Cpu, ShieldCheck, Sparkles } from 'lucide-react';
-import { aiHubService } from '../../services/aiHubService';
+import { Cpu, ShieldCheck } from 'lucide-react';
 
 interface Props {
   activeRoute: RouteOption;
-  language?: AppLanguage;
 }
 
-export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en' }) => {
-  const [aiExplanation, setAiExplanation] = useState<string>('');
-  const [isExplaining, setIsExplaining] = useState(false);
-
+export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute }) => {
   // Extract aggregate feature vector from active route
   const features: SafetyFeatureVector = {
     roadClassWeight: activeRoute.routeType === 'safe' ? 0.95 : activeRoute.routeType === 'balanced' ? 0.70 : 0.25,
@@ -22,92 +17,40 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
     distToEmergencyMeters: Math.round((1 - activeRoute.factors.emergency) * 1200),
     roadWidthLanes: activeRoute.routeType === 'safe' ? 6 : 2,
     nightHour: 23, // 11 PM
-    activeHazardSeverity: activeRoute.factors.incidentPenalty,
-    pedestrianFootpath: activeRoute.routeType === 'safe' ? 1.0 : activeRoute.routeType === 'balanced' ? 0.75 : 0.1
+    activeHazardSeverity: activeRoute.factors.incidentPenalty
   };
 
   const mlResult = predictSafetyWithTreeShap(features);
-
-  useEffect(() => {
-    let isCurrent = true;
-    setIsExplaining(true);
-
-    aiHubService
-      .explainTreeShapWithGemini({
-        routeName: activeRoute.name,
-        routeType: activeRoute.routeType,
-        safetyScore: mlResult.predictedSafetyScore,
-        shapValues: mlResult.shapValues,
-        language
-      })
-      .then((narrative) => {
-        if (isCurrent) {
-          setAiExplanation(narrative);
-          setIsExplaining(false);
-        }
-      })
-      .catch(() => {
-        if (isCurrent) setIsExplaining(false);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [activeRoute.id, activeRoute.routeType, language, mlResult.predictedSafetyScore]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {/* Header with Model Confidence */}
       <div style={{
-        backgroundColor: 'var(--safe-emerald-subtle)',
-        border: '1px solid var(--safe-emerald)',
-        borderRadius: 'var(--radius-md)',
-        padding: '10px 14px',
+        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+        border: '1px solid rgba(16, 185, 129, 0.3)',
+        borderRadius: '8px',
+        padding: '10px 12px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Cpu size={16} color="var(--safe-emerald)" />
-          <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)' }}>
-            TreeSHAP Local Attribution Model
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Cpu size={14} color="var(--safe-emerald)" />
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Empirical ML Model & TreeSHAP (XAI)
           </span>
         </div>
 
         <div style={{
           fontSize: '10px',
-          fontWeight: 800,
-          backgroundColor: 'rgba(16, 185, 129, 0.25)',
+          fontWeight: 700,
+          backgroundColor: 'rgba(16, 185, 129, 0.2)',
           color: 'var(--safe-emerald)',
-          padding: '2px 8px',
-          borderRadius: 'var(--radius-full)'
+          padding: '2px 6px',
+          borderRadius: '4px'
         }}>
-          {Math.round(mlResult.modelConfidence * 100)}% Confidence
+          94% Confidence
         </div>
-      </div>
-
-      {/* Gemini AI TreeSHAP Explanation Card */}
-      <div style={{
-        backgroundColor: 'rgba(59, 130, 246, 0.08)',
-        border: '1px solid rgba(59, 130, 246, 0.3)',
-        borderRadius: 'var(--radius-md)',
-        padding: '10px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: 'var(--haven-blue)' }}>
-            <Sparkles size={13} />
-            <span>AI Safety Reasoning</span>
-          </div>
-          <span style={{ fontSize: '9px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.2)', color: 'var(--haven-blue)' }}>
-            Gemini + TreeSHAP
-          </span>
-        </div>
-        <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-          {isExplaining ? 'Generating natural safety explanation...' : aiExplanation}
-        </p>
       </div>
 
       {/* Model Summary Row */}
@@ -117,21 +60,20 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
         alignItems: 'center',
         backgroundColor: 'var(--surface-card)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-md)',
-        padding: '12px 14px',
-        boxShadow: 'var(--shadow-subtle)'
+        borderRadius: '8px',
+        padding: '10px 12px'
       }}>
         <div>
-          <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>BASE VALUE E[f(x)]</div>
-          <div className="mono-num" style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>BASE EXPECTATION E[f(x)]</div>
+          <div className="mono-num" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)' }}>
             {MODEL_BASE_VALUE.toFixed(1)} pts
           </div>
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>PREDICTED SAFETY SCORE</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>PREDICTED SAFETY SCORE</div>
           <div className="mono-num" style={{
-            fontSize: '18px',
+            fontSize: '16px',
             fontWeight: 800,
             color: mlResult.predictedSafetyScore >= 70 ? 'var(--safe-emerald)' : 'var(--danger-crimson)'
           }}>
@@ -144,28 +86,27 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
       <div style={{
         backgroundColor: 'var(--surface-card)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '14px',
-        boxShadow: 'var(--shadow-subtle)'
+        borderRadius: '8px',
+        padding: '12px'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Feature Attributions (φ_i)
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            Game-Theoretic Feature Attributions (φ_i)
           </span>
-          <span style={{ fontSize: '10px', color: 'var(--accent-amber)', fontWeight: 700 }}>SHAP Additive Sum</span>
+          <span style={{ fontSize: '10px', color: 'var(--accent-amber)' }}>SHAP Additive Sum</span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {mlResult.shapValues.map((item) => {
             const isPositive = item.shapValue >= 0;
-            const barWidth = Math.min(100, Math.abs(item.shapValue) * 4.5);
+            const barWidth = Math.min(100, Math.abs(item.shapValue) * 4);
 
             return (
-              <div key={item.featureName} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div key={item.featureName} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{item.displayName}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.displayName}</span>
                   <span className="mono-num" style={{
-                    fontWeight: 800,
+                    fontWeight: 700,
                     color: isPositive ? 'var(--safe-emerald)' : 'var(--danger-crimson)'
                   }}>
                     {isPositive ? `+${item.shapValue.toFixed(1)}` : item.shapValue.toFixed(1)} pts
@@ -174,20 +115,18 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
 
                 {/* Micro Bar */}
                 <div style={{
-                  height: '5px',
+                  height: '4px',
                   backgroundColor: 'var(--surface-elevated)',
-                  borderRadius: 'var(--radius-full)',
+                  borderRadius: '2px',
                   overflow: 'hidden',
                   display: 'flex',
-                  justifyContent: isPositive ? 'flex-start' : 'flex-end',
-                  border: '1px solid var(--border-subtle)'
+                  justifyContent: isPositive ? 'flex-start' : 'flex-end'
                 }}>
                   <div style={{
                     width: `${barWidth}%`,
                     height: '100%',
                     backgroundColor: isPositive ? 'var(--safe-emerald)' : 'var(--danger-crimson)',
-                    borderRadius: 'var(--radius-full)',
-                    boxShadow: isPositive ? 'var(--shadow-glow-emerald)' : 'var(--shadow-glow-crimson)'
+                    borderRadius: '2px'
                   }} />
                 </div>
 
@@ -202,9 +141,9 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
 
       {/* Decision Boundary Explanation */}
       <div style={{
-        backgroundColor: 'var(--surface-elevated)',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
         border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-md)',
+        borderRadius: '8px',
         padding: '10px 12px',
         display: 'flex',
         alignItems: 'center',
@@ -212,7 +151,7 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
         fontSize: '11px',
         color: 'var(--text-secondary)'
       }}>
-        <ShieldCheck size={16} color="var(--safe-emerald)" style={{ flexShrink: 0 }} />
+        <ShieldCheck size={14} color="var(--safe-emerald)" style={{ flexShrink: 0 }} />
         <span>
           <strong>Decision Boundary:</strong> {mlResult.decisionBoundary}. Grounded in SafetiPin empirical night mobility audit standards.
         </span>
@@ -220,5 +159,3 @@ export const TreeShapWaterfall: React.FC<Props> = ({ activeRoute, language = 'en
     </div>
   );
 };
-
-export default TreeShapWaterfall;

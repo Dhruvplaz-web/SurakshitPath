@@ -128,7 +128,7 @@ export const TermsOfServiceModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <Navigation size={14} color="var(--accent-amber)" /> 1. Nature of the Advisory Service
             </h3>
             <p style={{ margin: 0 }}>
-              SurakshitPath is a public civic navigation tool designed for Safe &amp; Smart Communities. The service is designed to:
+              SurakshitPath is a public research and civic navigation tool developed under Problem Statement PS-20 (Safe &amp; Smart Communities). The service is designed to:
             </p>
             <ul style={{ margin: '8px 0 0 18px', padding: 0 }}>
               <li>Offer comparative dual-route insights (Fastest Route vs. High-Visibility Corridor).</li>

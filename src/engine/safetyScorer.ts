@@ -146,43 +146,19 @@ export function calculateSegmentSafety(
   };
 }
 
-import { TravelProfile } from '../types/routing';
-
 /**
  * Calculates Parametric Edge Traversal Impedance C(e)
- * C(e) = Length(e) * [ 1 + beta * (1 - S_e / 100)^1.5 ]
- * Tailored across 4 travel profiles (Walking, Two-Wheeler, Four-Wheeler, Transit)
+ * C(e) = Length(e) * (1 + beta * (1 - S_e))
  */
 export function calculateEdgeImpedance(
   edge: GraphEdge,
   beta: number,
-  activeEvents: DynamicEvent[] = [],
-  profile: TravelProfile = 'pedestrian'
+  activeEvents: DynamicEvent[] = []
 ): number {
   const { factors } = calculateSegmentSafety(edge, activeEvents);
   const S_norm = factors.compositeScore / 100.0;
   
-  // Exponential edge impedance: C(e) = L * [ 1 + beta * (1 - S_e)^1.5 ]
-  const safetyPenalty = Math.pow(1 - S_norm, 1.5);
-  
-  // Profile-specific multipliers
-  let profileMultiplier = 1.0;
-  if (profile === 'pedestrian') {
-    // Pedestrians strictly avoid unlit service alleys and mountain cuts
-    if (edge.roadClass === 'alley' || edge.roadClass === 'service') {
-      profileMultiplier = 2.4;
-    }
-  } else if (profile === 'two_wheeler') {
-    // Two-wheelers prioritize arterial street lighting over narrow cuts
-    if (edge.roadClass === 'alley') {
-      profileMultiplier = 1.8;
-    }
-  } else if (profile === 'transit') {
-    // Transit profile prioritizes proximity to BRTS and metro nodes
-    if (edge.transitDistanceMeters <= 100) {
-      profileMultiplier = 0.75; // Bonus incentive for transit corridor
-    }
-  }
-
-  return edge.lengthMeters * (1 + beta * safetyPenalty * profileMultiplier);
+  // Non-linear penalty enhancement: allows high-safety users (beta >= 0.8) to decisively detour around dangerous alleys
+  const penalty = Math.pow(1 - S_norm, 1.5);
+  return edge.lengthMeters * (1 + beta * penalty);
 }

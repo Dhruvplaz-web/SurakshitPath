@@ -10,6 +10,7 @@ interface Props {
     fastest: RouteOption;
     safe: RouteOption;
     balanced: RouteOption;
+    transit?: RouteOption;
   };
   activeRouteId: string;
   onSelectRoute: (id: string) => void;
@@ -29,16 +30,17 @@ export const RouteComparisonCard: React.FC<Props> = ({
   currentLanguage = 'en'
 }) => {
   const t = getTranslation(currentLanguage);
-  const routeList = [routes.safe, routes.fastest, routes.balanced];
+  const routeList = [routes.safe, routes.balanced, routes.fastest, ...(routes.transit ? [routes.transit] : [])].filter(Boolean);
 
   // Pre-calculate real-time corridor shelter metrics for each candidate route
-  const shelterMetricsMap = useMemo(() => {
+  const shelterMetricsMap: Record<string, ReturnType<typeof analyzeRouteShelters>> = useMemo(() => {
     return {
       safe: analyzeRouteShelters(routes.safe.coordinates, PUNE_SAFE_HAVENS),
       fastest: analyzeRouteShelters(routes.fastest.coordinates, PUNE_SAFE_HAVENS),
-      balanced: analyzeRouteShelters(routes.balanced.coordinates, PUNE_SAFE_HAVENS)
+      balanced: analyzeRouteShelters(routes.balanced.coordinates, PUNE_SAFE_HAVENS),
+      ...(routes.transit ? { transit: analyzeRouteShelters(routes.transit.coordinates, PUNE_SAFE_HAVENS) } : {})
     };
-  }, [routes.safe.coordinates, routes.fastest.coordinates, routes.balanced.coordinates]);
+  }, [routes.safe.coordinates, routes.fastest.coordinates, routes.balanced.coordinates, routes.transit?.coordinates]);
 
   const getScoreColor = (score: number) => {
     if (score >= 75) return 'var(--safe-emerald)';
@@ -64,6 +66,13 @@ export const RouteComparisonCard: React.FC<Props> = ({
         return {
           icon: <Bus size={13} color="var(--haven-blue)" />,
           label: `${t.balancedRoute} · ${currentLanguage === 'mr' ? 'मेट्रो व बस कॉरिडोअर' : currentLanguage === 'hi' ? 'मेट्रो एवं बस कॉरिडोर' : 'Metro Transit'}`,
+          className: 'gmaps-badge-balanced'
+        };
+      case 'transit':
+      default:
+        return {
+          icon: <Bus size={13} color="var(--haven-blue)" />,
+          label: `${currentLanguage === 'mr' ? 'सार्वजनिक वाहतूक कॉरिडोअर' : currentLanguage === 'hi' ? 'सार्वजनिक परिवहन कॉरिडोर' : 'Transit Boulevard'} · ${currentLanguage === 'mr' ? 'हायवे व बस' : currentLanguage === 'hi' ? 'हाईवे एवं बस' : 'Highways & Hubs'}`,
           className: 'gmaps-badge-balanced'
         };
     }
@@ -160,13 +169,24 @@ export const RouteComparisonCard: React.FC<Props> = ({
               </div>
 
               {/* Radial Circular Safety Index Ring */}
-              <div className="score-radial-wrapper" title={`Safety Confidence Index: ${route.safetyScore}/100`}>
-                <svg className="score-radial-svg" viewBox="0 0 44 44">
+              <div
+                className="score-radial-wrapper"
+                title={`Safety Confidence Index: ${route.safetyScore}/100`}
+                style={{ width: '44px', height: '44px', minWidth: '44px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              >
+                <svg
+                  className="score-radial-svg"
+                  viewBox="0 0 44 44"
+                  width="44"
+                  height="44"
+                  style={{ width: '44px', height: '44px', transform: 'rotate(-90deg)', display: 'block' }}
+                >
                   <circle
                     className="score-radial-bg"
                     cx="22"
                     cy="22"
                     r={radius}
+                    style={{ fill: 'none', stroke: 'rgba(255, 255, 255, 0.12)', strokeWidth: 3.5 }}
                   />
                   <circle
                     className="score-radial-progress"
@@ -176,9 +196,13 @@ export const RouteComparisonCard: React.FC<Props> = ({
                     stroke={scoreColor}
                     strokeDasharray={circumference}
                     strokeDashoffset={strokeDashoffset}
+                    style={{ fill: 'none', strokeWidth: 3.5, strokeLinecap: 'round', transition: 'stroke-dashoffset 0.6s ease' }}
                   />
                 </svg>
-                <div className="score-radial-text" style={{ color: scoreColor }}>
+                <div
+                  className="score-radial-text"
+                  style={{ position: 'absolute', fontSize: '12px', fontWeight: 800, color: scoreColor, fontFamily: 'monospace' }}
+                >
                   {route.safetyScore}
                 </div>
               </div>
@@ -192,149 +216,151 @@ export const RouteComparisonCard: React.FC<Props> = ({
               </span>
             </div>
 
-            {/* Real-time Dynamic Safety Attributes & Shelter Corridor Meters */}
-            <div className="factor-progress-container" style={{ marginTop: '6px', paddingTop: '6px' }}>
-              {/* Illumination Meter */}
-              <div className="factor-row">
-                <span style={{ color: 'var(--text-secondary)' }}>{t.illumination}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div className="progress-track" style={{ width: '110px' }}>
-                    <div
-                      className="progress-fill"
-                      style={{
-                        width: `${lightingPct}%`,
-                        backgroundColor: lightingPct >= 70 ? 'var(--safe-emerald)' : lightingPct >= 50 ? 'var(--accent-amber)' : 'var(--danger-crimson)'
-                      }}
-                    />
-                  </div>
-                  <span className="mono-num" style={{ width: '28px', textAlign: 'right', fontWeight: 700 }}>
-                    {lightingPct}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Dynamic Real-time Safe Shelters Count along this route */}
-              <div
-                className="factor-row"
-                style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onOpenShelters) onOpenShelters();
-                }}
-                title="Click to view verified shelters along this specific corridor"
-              >
-                <span style={{ color: 'var(--text-secondary)' }}>{t.shelters}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--haven-blue)', fontWeight: 700, fontSize: '11px' }}>
-                  <Building size={12} />
-                  <span>
-                    {shelterMetrics.directCount > 0
-                      ? `${shelterMetrics.directCount} On-Corridor (${shelterMetrics.extendedCount} nearby)`
-                      : shelterMetrics.extendedCount > 0
-                        ? `${shelterMetrics.extendedCount} within 1.2km`
-                        : (currentLanguage === 'mr' ? '० निवारे (धोकादायक)' : currentLanguage === 'hi' ? '0 आश्रय (असुरक्षित)' : '0 Havens on Corridor')}
-                  </span>
-                  <span style={{ fontSize: '9px', opacity: 0.8 }}>↗</span>
-                </div>
-              </div>
-
-              {/* Dynamic Danger & Threat Breakdown Bar (Shown when active or inspected) */}
-              {isActive && (
-                <div style={{
-                  marginTop: '8px',
-                  padding: '8px 10px',
-                  backgroundColor: 'rgba(15, 23, 42, 0.45)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
-                      <Sparkles size={11} color="var(--haven-blue)" />
-                      {currentLanguage === 'mr' ? 'सुरक्षा जोखीम आलेख (रिअल-टाइम)' : currentLanguage === 'hi' ? 'सुरक्षा जोखिम ग्राफ (रीयल-टाइम)' : 'Danger Graph & Corridor Telemetry'}
-                    </span>
-                    <span className="mono-num" style={{ color: threatLevel > 40 ? 'var(--danger-crimson)' : 'var(--safe-emerald)', fontWeight: 800 }}>
-                      {threatLevel}% {currentLanguage === 'mr' ? 'धोका प्रमाण' : currentLanguage === 'hi' ? 'जोखिम स्तर' : 'Threat Level'}
-                    </span>
-                  </div>
-
-                  {/* Segmented Horizon Density Strip */}
-                  <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)' }}>
-                    <div style={{ width: `${lightingPct}%`, backgroundColor: 'var(--safe-emerald)' }} title={`Illumination: ${lightingPct}%`} />
-                    <div style={{ width: `${activityPct}%`, backgroundColor: 'var(--haven-blue)' }} title={`Frontage Activity: ${activityPct}%`} />
-                    <div style={{ width: `${threatLevel}%`, backgroundColor: 'var(--danger-crimson)' }} title={`Threat Gap: ${threatLevel}%`} />
-                  </div>
-
-                  {/* Multi-attribute micro tokens */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '9px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Store size={10} color="#94a3b8" />
-                      <span>Frontage: <strong style={{ color: '#fff' }}>{activityPct}%</strong></span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Shield size={10} color="var(--haven-blue)" />
-                      <span>Response: <strong style={{ color: '#fff' }}>{emergencyPct}%</strong></span>
+            {/* Real-time Dynamic Safety Attributes & Shelter Corridor Meters (Expanded when Active) */}
+            {isActive && (
+              <>
+                <div className="factor-progress-container" style={{ marginTop: '6px', paddingTop: '6px' }}>
+                  {/* Illumination Meter */}
+                  <div className="factor-row">
+                    <span style={{ color: 'var(--text-secondary)' }}>{t.illumination}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className="progress-track" style={{ width: '110px' }}>
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${lightingPct}%`,
+                            backgroundColor: lightingPct >= 70 ? 'var(--safe-emerald)' : lightingPct >= 50 ? 'var(--accent-amber)' : 'var(--danger-crimson)'
+                          }}
+                        />
+                      </div>
+                      <span className="mono-num" style={{ width: '28px', textAlign: 'right', fontWeight: 700 }}>
+                        {lightingPct}%
+                      </span>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
 
-            {/* IDEA 1: Shelter Desert Early Warning Badge */}
-            {(shelterMetrics.shelterDesert.hasDesert || (route.routeType === 'fastest' && shelterMetrics.directCount === 0)) && (
-              <div style={{
-                marginTop: '8px',
-                padding: '7px 10px',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(239, 68, 68, 0.16)',
-                border: '1px solid rgba(239, 68, 68, 0.45)',
-                color: '#fca5a5',
-                fontSize: '11px',
-                lineHeight: 1.35,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '6px'
-              }}>
-                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px', color: '#ef4444' }} />
-                <div>
-                  <div style={{ fontWeight: 800, color: '#f87171', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>{currentLanguage === 'mr' ? '⚠️ निवारा विरळ कॉरिडोअर (Shelter Desert)' : currentLanguage === 'hi' ? '⚠️ आश्रय विहीन क्षेत्र (Shelter Desert)' : '⚠️ SHELTER DESERT DETECTED'}</span>
-                    <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(239,68,68,0.3)', color: '#fff' }}>
-                      {shelterMetrics.shelterDesert.desertSpanKm > 0 ? `${shelterMetrics.shelterDesert.desertSpanKm} km` : '2.8 km'}
+                  {/* Dynamic Real-time Safe Shelters Count along this route */}
+                  <div
+                    className="factor-row"
+                    style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onOpenShelters) onOpenShelters();
+                    }}
+                    title="Click to view verified shelters along this specific corridor"
+                  >
+                    <span style={{ color: 'var(--text-secondary)' }}>{t.shelters}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--haven-blue)', fontWeight: 700, fontSize: '11px' }}>
+                      <Building size={12} />
+                      <span>
+                        {shelterMetrics.directCount > 0
+                          ? `${shelterMetrics.directCount} On-Corridor (${shelterMetrics.extendedCount} nearby)`
+                          : shelterMetrics.extendedCount > 0
+                            ? `${shelterMetrics.extendedCount} within 1.2km`
+                            : (currentLanguage === 'mr' ? '० निवारे (धोकादायक)' : currentLanguage === 'hi' ? '0 आश्रय (असुरक्षित)' : '0 Havens on Corridor')}
+                      </span>
+                      <span style={{ fontSize: '9px', opacity: 0.8 }}>↗</span>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Danger & Threat Breakdown Bar */}
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '8px 10px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
+                        <Sparkles size={11} color="var(--haven-blue)" />
+                        {currentLanguage === 'mr' ? 'सुरक्षा जोखीम आलेख (रिअल-टाइम)' : currentLanguage === 'hi' ? 'सुरक्षा जोखिम ग्राफ (रीयल-टाइम)' : 'Danger Graph & Corridor Telemetry'}
+                      </span>
+                      <span className="mono-num" style={{ color: threatLevel > 40 ? 'var(--danger-crimson)' : 'var(--safe-emerald)', fontWeight: 800 }}>
+                        {threatLevel}% {currentLanguage === 'mr' ? 'धोका प्रमाण' : currentLanguage === 'hi' ? 'जोखिम स्तर' : 'Threat Level'}
+                      </span>
+                    </div>
+
+                    {/* Segmented Horizon Density Strip */}
+                    <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                      <div style={{ width: `${lightingPct}%`, backgroundColor: 'var(--safe-emerald)' }} title={`Illumination: ${lightingPct}%`} />
+                      <div style={{ width: `${activityPct}%`, backgroundColor: 'var(--haven-blue)' }} title={`Frontage Activity: ${activityPct}%`} />
+                      <div style={{ width: `${threatLevel}%`, backgroundColor: 'var(--danger-crimson)' }} title={`Threat Gap: ${threatLevel}%`} />
+                    </div>
+
+                    {/* Multi-attribute micro tokens */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '9px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Store size={10} color="#94a3b8" />
+                        <span>Frontage: <strong style={{ color: '#fff' }}>{activityPct}%</strong></span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Shield size={10} color="var(--haven-blue)" />
+                        <span>Response: <strong style={{ color: '#fff' }}>{emergencyPct}%</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shelter Desert Early Warning Badge */}
+                {(shelterMetrics.shelterDesert.hasDesert || (route.routeType === 'fastest' && shelterMetrics.directCount === 0)) && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '7px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.16)',
+                    border: '1px solid rgba(239, 68, 68, 0.45)',
+                    color: '#fca5a5',
+                    fontSize: '11px',
+                    lineHeight: 1.35,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '6px'
+                  }}>
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px', color: '#ef4444' }} />
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#f87171', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>{currentLanguage === 'mr' ? '⚠️ निवारा विरळ कॉरिडोअर (Shelter Desert)' : currentLanguage === 'hi' ? '⚠️ आश्रय विहीन क्षेत्र (Shelter Desert)' : '⚠️ SHELTER DESERT DETECTED'}</span>
+                        <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(239,68,68,0.3)', color: '#fff' }}>
+                          {shelterMetrics.shelterDesert.desertSpanKm > 0 ? `${shelterMetrics.shelterDesert.desertSpanKm} km` : '2.8 km'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '10px', marginTop: '2px', color: '#fecaca' }}>
+                        {currentLanguage === 'mr'
+                          ? 'या मार्गावर ६५० मीटरच्या आत २४/७ सुरक्षित निवारे नाहीत. रात्रीच्या वेळी टाळा.'
+                          : currentLanguage === 'hi'
+                            ? 'इस मार्ग पर 650 मी. के भीतर कोई 24/7 आश्रय नहीं है। रात में न चुनें।'
+                            : 'Extended stretch with zero verified 24/7 havens within 650m. High vulnerability for solo night commuters.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Warning Callout for Unrecommended Route */}
+                {(route.warningNotice || (route.routeType === 'fastest' && !shelterMetrics.shelterDesert.hasDesert)) && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    color: '#fca5a5',
+                    fontSize: '11px',
+                    lineHeight: 1.35,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '6px'
+                  }}>
+                    <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#ef4444' }} />
+                    <span>
+                      {route.warningNotice || (currentLanguage === 'mr' ? '⚠️ रात्रीच्या वेळी शिफारस केलेली नाही: ४ अंधारे रस्ते, बंद दुकाने, उच्च धोका.' : currentLanguage === 'hi' ? '⚠️ रात में अनुशंसित नहीं: 4 अंधेरे रास्ते, बंद दुकानें, अत्यधिक जोखिम।' : '⚠️ NOT RECOMMENDED AT NIGHT: 4 unlit stretches, 0 open commercial frontage, high isolated incident risk.')}
                     </span>
                   </div>
-                  <div style={{ fontSize: '10px', marginTop: '2px', color: '#fecaca' }}>
-                    {currentLanguage === 'mr'
-                      ? 'या मार्गावर ६५० मीटरच्या आत २४/७ सुरक्षित निवारे नाहीत. रात्रीच्या वेळी टाळा.'
-                      : currentLanguage === 'hi'
-                        ? 'इस मार्ग पर 650 मी. के भीतर कोई 24/7 आश्रय नहीं है। रात में न चुनें।'
-                        : 'Extended stretch with zero verified 24/7 havens within 650m. High vulnerability for solo night commuters.'}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Warning Callout for Unrecommended Route */}
-            {(route.warningNotice || (route.routeType === 'fastest' && !shelterMetrics.shelterDesert.hasDesert)) && (
-              <div style={{
-                marginTop: '8px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                color: '#fca5a5',
-                fontSize: '11px',
-                lineHeight: 1.35,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '6px'
-              }}>
-                <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#ef4444' }} />
-                <span>
-                  {route.warningNotice || (currentLanguage === 'mr' ? '⚠️ रात्रीच्या वेळी शिफारस केलेली नाही: ४ अंधारे रस्ते, बंद दुकाने, उच्च धोका.' : currentLanguage === 'hi' ? '⚠️ रात में अनुशंसित नहीं: 4 अंधेरे रास्ते, बंद दुकानें, अत्यधिक जोखिम।' : '⚠️ NOT RECOMMENDED AT NIGHT: 4 unlit stretches, 0 open commercial frontage, high isolated incident risk.')}
-                </span>
-              </div>
+                )}
+              </>
             )}
 
             {/* Active Route Action Footer (Google Maps Style) */}

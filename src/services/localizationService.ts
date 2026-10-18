@@ -99,7 +99,7 @@ const DICTIONARY: Record<AppLanguage, TranslationDictionary> = {
   en: {
     appName: 'SurakshitPath',
     appTagline: 'PS-20 · Night Navigation',
-    testbedSubtitle: 'Pune Metropolitan Testbed: Tathawade / Hinjawadi ⇄ Kothrud',
+    testbedSubtitle: 'Maharashtra Statewide Cyber-Physical Safety Platform · 36 Districts & PMRDA Corridor',
     roleCommuter: 'Commuter',
     roleAdmin: 'Civic Admin (PMC)',
     roleGuardian: 'Trusted Guardian',
