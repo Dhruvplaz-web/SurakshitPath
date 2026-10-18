@@ -45,36 +45,16 @@ class StrobeService {
     this.isActive = true;
     this.isTorchSupported = false;
 
-    // 1. Attempt hardware camera torch (Mobile Chromium: Chrome Android, Samsung, Edge)
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
-      try {
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' }
-          }
-        });
-
-        this.track = this.stream.getVideoTracks()[0] || null;
-        if (this.track) {
-          const capabilities = (this.track.getCapabilities?.() || {}) as { torch?: boolean };
-          if (capabilities.torch) {
-            this.isTorchSupported = true;
-          }
-        }
-      } catch {
-        // Camera access blocked or unsupported (iOS Safari) - Screen flasher takes over transparently
-        this.isTorchSupported = false;
-      }
-    }
-
-    // 2. Rapid strobe oscillation loop (125ms pulse = 8Hz)
+    // 1. Immediately engage full-screen visual strobe (Zero-permission, instant optical deterrence)
     let state = false;
+    let torchCycle = 0;
     this.pulseInterval = setInterval(async () => {
       state = !state;
       this.pulseState = state;
+      torchCycle++;
 
-      // Pulse physical hardware torch LED if available
-      if (this.isTorchSupported && this.track && this.track.readyState === 'live') {
+      // Pulse hardware camera LED at safe 2.5Hz (every other cycle) to prevent Android camera HAL driver overheat
+      if (this.isTorchSupported && this.track && this.track.readyState === 'live' && torchCycle % 2 === 0) {
         try {
           await this.track.applyConstraints({
             advanced: [{ torch: state } as any]
@@ -84,16 +64,35 @@ class StrobeService {
         }
       }
 
-      // Notify screen hazard flasher subscribers
+      // Notify screen hazard flasher subscribers immediately
       this.notify(state, this.isTorchSupported);
-    }, 125);
+    }, 150);
+
+    // 2. Non-blocking hardware camera torch attempt in background (does not hold up screen flasher)
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } }
+      }).then((stream) => {
+        if (!this.isActive) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        this.stream = stream;
+        this.track = stream.getVideoTracks()[0] || null;
+        if (this.track) {
+          const capabilities = (this.track.getCapabilities?.() || {}) as { torch?: boolean };
+          if (capabilities.torch) {
+            this.isTorchSupported = true;
+          }
+        }
+      }).catch(() => {
+        this.isTorchSupported = false;
+      });
+    }
 
     return this.isTorchSupported;
   }
 
-  /**
-   * Stops physical strobe and screen flasher, releasing camera hardware
-   */
   public stopStrobe(): void {
     if (!this.isActive) return;
 

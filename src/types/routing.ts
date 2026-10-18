@@ -82,7 +82,7 @@ export interface RouteOption {
   id: string;
   name: string;
   tagline: string;
-  routeType: 'fastest' | 'safe' | 'balanced';
+  routeType: 'fastest' | 'safe' | 'balanced' | 'transit';
   travelProfile?: TravelProfile;
   distanceMeters: number;
   durationMinutes: number;

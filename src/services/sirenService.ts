@@ -22,6 +22,11 @@ class SirenService {
       this.oscillator = this.audioCtx.createOscillator();
       this.gainNode = this.audioCtx.createGain();
 
+      // Ensure audio context is active and unmuted on mobile browsers
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+
       this.oscillator.type = 'sawtooth';
       this.oscillator.frequency.setValueAtTime(800, this.audioCtx.currentTime);
 

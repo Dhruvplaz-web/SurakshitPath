@@ -7,9 +7,9 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   origin: PuneLocation;
-  destination: PuneLocation;
+  destination: PuneLocation | null;
   onSelectOrigin: (loc: PuneLocation) => void;
-  onSelectDestination: (loc: PuneLocation) => void;
+  onSelectDestination: (loc: PuneLocation | null) => void;
   onSwapLocations: () => void;
   onPickOnMap: (target: 'origin' | 'destination') => void;
   isPickingOnMap: 'origin' | 'destination' | null;
@@ -131,7 +131,7 @@ export const MobileSearchModal: React.FC<Props> = ({
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {popularLandmarks.map((loc) => {
-                const isCurrentDest = destination.id === loc.id;
+                const isCurrentDest = destination?.id === loc.id;
                 return (
                   <button
                     key={loc.id}

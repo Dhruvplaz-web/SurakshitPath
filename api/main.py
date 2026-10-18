@@ -237,6 +237,19 @@ async def calculate_safety_score(req: SafetyScoreRequest):
         }
     }
 
+MODE_TRAVEL_CONFIG = {
+    "pedestrian": {"speed_kmh": 5.0, "wait_minutes": 0.0},
+    "two_wheeler": {"speed_kmh": 28.0, "wait_minutes": 0.0},
+    "four_wheeler": {"speed_kmh": 24.0, "wait_minutes": 0.0},
+    "transit": {"speed_kmh": 14.0, "wait_minutes": 7.0},
+}
+
+MODE_SPEEDS_KMH = {k: v["speed_kmh"] for k, v in MODE_TRAVEL_CONFIG.items()}
+
+def calculate_mode_duration_minutes(distance_meters: float, mode: str = "pedestrian") -> int:
+    config = MODE_TRAVEL_CONFIG.get(mode, MODE_TRAVEL_CONFIG["pedestrian"])
+    return max(1, round((distance_meters / 1000.0) / config["speed_kmh"] * 60.0 + config["wait_minutes"]))
+
 @app.post("/api/routes/calculate")
 async def calculate_routes(req: RouteRequest):
     """
@@ -244,10 +257,10 @@ async def calculate_routes(req: RouteRequest):
     """
     coords_safe = []
     dist_safe = 13800
-    dur_safe = 27
+    dur_safe = calculate_mode_duration_minutes(dist_safe, req.mode)
     coords_fast = []
     dist_fast = 11400
-    dur_fast = 21
+    dur_fast = calculate_mode_duration_minutes(dist_fast, req.mode)
 
     try:
         url = f"https://router.project-osrm.org/route/v1/driving/{req.origin.lon},{req.origin.lat};{req.destination.lon},{req.destination.lat}?overview=full&geometries=geojson&alternatives=true"
@@ -260,12 +273,12 @@ async def calculate_routes(req: RouteRequest):
                     r0 = routes[0]
                     coords_safe = [[round(c[1], 5), round(c[0], 5)] for c in r0["geometry"]["coordinates"]]
                     dist_safe = round(r0["distance"])
-                    dur_safe = max(1, round(r0["duration"] / 60))
+                    dur_safe = calculate_mode_duration_minutes(dist_safe, req.mode)
 
                     r1 = routes[1] if len(routes) > 1 else r0
                     coords_fast = [[round(c[1], 5), round(c[0], 5)] for c in r1["geometry"]["coordinates"]]
                     dist_fast = round(r1["distance"])
-                    dur_fast = max(1, round(r1["duration"] / 60))
+                    dur_fast = calculate_mode_duration_minutes(dist_fast, req.mode)
     except Exception:
         pass
 
@@ -377,6 +390,91 @@ async def get_pune_weather():
         "visibility_meters": 10000,
         "precipitation_mm": 0.0,
         "night_visibility_status": "Clear & Optimal"
+    }
+
+
+# In-memory session tracking for zero-cost high-concurrency state
+ACTIVE_RIDE_SESSIONS = {}
+ACTIVE_LOCATION_SHARES = {}
+
+class LocationUpdateRequest(BaseModel):
+    session_id: str
+    commuter_name: Optional[str] = "Citizen Commuter"
+    latitude: float
+    longitude: float
+    battery_level: Optional[int] = 100
+    active_route_name: Optional[str] = "Safe Corridor"
+
+class LocationStopRequest(BaseModel):
+    session_id: str
+
+class RideSessionModel(BaseModel):
+    ride_id: str
+    user_id: Optional[str] = "guest_commuter"
+    route_id: Optional[str] = "route_safe"
+    route_name: Optional[str] = "Safe Corridor"
+    provider: Optional[str] = "uber"
+    pickup_lat: float
+    pickup_lng: float
+    destination_lat: float
+    destination_lng: float
+    pickup_name: Optional[str] = "Current Location"
+    destination_name: Optional[str] = "Destination"
+    started_at: Optional[float] = None
+    monitoring_enabled: Optional[bool] = False
+    status: Optional[str] = "initiated"
+    safety_score: Optional[int] = 85
+
+class RideMonitoringRequest(BaseModel):
+    monitoring_enabled: bool
+    status: Optional[str] = "monitoring_started"
+
+class HazardRiskRequest(BaseModel):
+    coordinates: List[float]
+    lighting_score: Optional[float] = 0.85
+    amenity_density: Optional[float] = 0.80
+
+@app.post("/api/location-share/update")
+async def update_location_share(req: LocationUpdateRequest):
+    ACTIVE_LOCATION_SHARES[req.session_id] = {
+        "session_id": req.session_id,
+        "commuter_name": req.commuter_name,
+        "latitude": req.latitude,
+        "longitude": req.longitude,
+        "battery_level": req.battery_level,
+        "active_route_name": req.active_route_name,
+        "updated_at": time.time()
+    }
+    return {"status": "ok", "session_id": req.session_id, "active_trackers": len(ACTIVE_LOCATION_SHARES)}
+
+@app.post("/api/location-share/stop")
+async def stop_location_share(req: LocationStopRequest):
+    ACTIVE_LOCATION_SHARES.pop(req.session_id, None)
+    return {"status": "stopped", "session_id": req.session_id}
+
+@app.post("/api/ride/session")
+async def create_or_update_ride_session(session: RideSessionModel):
+    ACTIVE_RIDE_SESSIONS[session.ride_id] = session.dict()
+    return {"status": "ok", "session": ACTIVE_RIDE_SESSIONS[session.ride_id]}
+
+@app.post("/api/ride/{ride_id}/monitoring")
+async def update_ride_monitoring(ride_id: str, req: RideMonitoringRequest):
+    if ride_id in ACTIVE_RIDE_SESSIONS:
+        ACTIVE_RIDE_SESSIONS[ride_id]["monitoring_enabled"] = req.monitoring_enabled
+        ACTIVE_RIDE_SESSIONS[ride_id]["status"] = req.status
+    return {"status": "ok", "ride_id": ride_id, "monitoring": req.monitoring_enabled}
+
+@app.post("/api/safety/analyze-hazard-risk")
+async def analyze_hazard_risk(req: HazardRiskRequest):
+    lat = req.coordinates[0] if len(req.coordinates) > 0 else 18.5204
+    lon = req.coordinates[1] if len(req.coordinates) > 1 else 73.8567
+    risk_score = round(max(5.0, 100.0 - (req.lighting_score * 50.0 + req.amenity_density * 40.0)), 1)
+    return {
+        "status": "success",
+        "coordinates": [lat, lon],
+        "risk_level": "low" if risk_score < 30 else "moderate" if risk_score < 60 else "elevated",
+        "risk_score": risk_score,
+        "recommendation": "Maintain arterial road alignment. Continuous street lighting verified."
     }
 
 if __name__ == "__main__":

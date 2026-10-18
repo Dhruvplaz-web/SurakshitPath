@@ -18,11 +18,11 @@ import {
 
 interface Props {
   activeRoute: RouteOption;
-  routes: { fastest: RouteOption; safe: RouteOption; balanced: RouteOption };
+  routes: { fastest: RouteOption; safe: RouteOption; balanced: RouteOption; transit?: RouteOption } | null;
   activeRouteId: string;
   onSelectRoute: (id: string) => void;
   origin: PuneLocation;
-  destination: PuneLocation;
+  destination: PuneLocation | null;
   beta: number;
   onBetaChange: (beta: number) => void;
   selectedEdgeId: string | null;
@@ -286,32 +286,50 @@ export const MobileBottomSheet: React.FC<Props> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{origin.name.split('(')[0].trim()}</span>
                   <span style={{ color: 'var(--text-muted)' }}>➔</span>
-                  <span style={{ fontWeight: 600, color: activeLockedHavenId ? '#34d399' : 'var(--accent-amber)' }}>
-                    {destination.name.split('(')[0].trim()}
+                  <span style={{ fontWeight: 600, color: destination ? (activeLockedHavenId ? '#34d399' : 'var(--accent-amber)') : 'var(--text-muted)' }}>
+                    {destination ? destination.name.split('(')[0].trim() : 'Where to safely?'}
                   </span>
                 </div>
               </div>
 
-              {/* Candidate Routes Comparison */}
-              <RouteComparisonCard
-                routes={routes}
-                activeRouteId={activeRouteId}
-                onSelectRoute={onSelectRoute}
-              />
+              {/* Candidate Routes Comparison (Render when routes available) */}
+              {routes && destination ? (
+                <>
+                  <RouteComparisonCard
+                    routes={routes}
+                    activeRouteId={activeRouteId}
+                    onSelectRoute={onSelectRoute}
+                  />
 
-              {/* Safety Preference Beta Slider */}
-              <div style={{
-                backgroundColor: 'var(--surface-card)',
-                padding: '12px',
-                borderRadius: '10px',
-                border: '1px solid var(--border-subtle)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700 }}>Safety Sensitivity (β = {beta.toFixed(2)})</span>
-                  <span style={{ fontSize: '10px', color: 'var(--accent-amber)' }}>Trade-off slider</span>
+                  {/* Safety Preference Beta Slider */}
+                  <div style={{
+                    backgroundColor: 'var(--surface-card)',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-subtle)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700 }}>Route Choices</span>
+                    </div>
+                    <SafetySlider beta={beta} onBetaChange={onBetaChange} activeRouteId={activeRouteId} onSelectRouteId={onSelectRoute} />
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: 'var(--surface-card)',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-subtle)',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--safe-emerald)', marginBottom: '4px' }}>
+                    🛡️ Safe Radar Active
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    Map centered on your live GPS location. Enter a destination above to calculate safe illuminated routes.
+                  </div>
                 </div>
-                <SafetySlider beta={beta} onBetaChange={onBetaChange} />
-              </div>
+              )}
 
               {/* Quick Actions Grid (3-column mobile layout) */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '4px' }}>

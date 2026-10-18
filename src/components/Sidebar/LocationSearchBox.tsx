@@ -3,13 +3,14 @@ import { PuneLocation, searchPuneLocations, getUserCurrentLocation, parseCoordin
 import { TravelProfile, AppLanguage } from '../../types/routing';
 import { getTranslation } from '../../services/localizationService';
 import { LocationFallbackModal } from '../Common/LocationFallbackModal';
-import { MapPin, ArrowUpDown, Crosshair, Search, Building2, GraduationCap, Bus, Car, Bike, Footprints, X, Navigation, Loader2 } from 'lucide-react';
+import { MapPin, ArrowUpDown, Crosshair, Search, Building2, GraduationCap, Bus, Car, Bike, Footprints, X, Navigation, Loader2, Clock, Home, Briefcase, ShieldCheck } from 'lucide-react';
+import { PUNE_SAFE_HAVENS } from '../../data/safeHavens';
 
 interface Props {
   origin: PuneLocation;
-  destination: PuneLocation;
+  destination: PuneLocation | null;
   onSelectOrigin: (loc: PuneLocation) => void;
-  onSelectDestination: (loc: PuneLocation) => void;
+  onSelectDestination: (loc: PuneLocation | null) => void;
   onSwapLocations: () => void;
   onPickOnMap: (target: 'origin' | 'destination') => void;
   isPickingOnMap: 'origin' | 'destination' | null;
@@ -38,6 +39,86 @@ export const LocationSearchBox: React.FC<Props> = ({
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isFallbackModalOpen, setIsFallbackModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Recent Searches stored in localStorage
+  const [recentSearches, setRecentSearches] = useState<Array<{ id: string; name: string; subtitle: string; coordinates: [number, number]; category?: PuneLocation['category']; timestamp: number }>>(() => {
+    try {
+      const raw = localStorage.getItem('surakshit_recent_searches');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Saved Home and Work places
+  const [savedHome, setSavedHome] = useState<PuneLocation | null>(() => {
+    try {
+      const raw = localStorage.getItem('surakshit_saved_home');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+
+  const [savedWork, setSavedWork] = useState<PuneLocation | null>(() => {
+    try {
+      const raw = localStorage.getItem('surakshit_saved_work');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+
+  const saveToRecent = (loc: PuneLocation) => {
+    try {
+      const item = {
+        id: loc.id,
+        name: loc.name,
+        subtitle: loc.subtitle,
+        coordinates: loc.coordinates,
+        category: loc.category,
+        timestamp: Date.now()
+      };
+      const filtered = recentSearches.filter(r => r.name !== loc.name && r.id !== loc.id);
+      const updated = [item, ...filtered].slice(0, 8);
+      setRecentSearches(updated);
+      localStorage.setItem('surakshit_recent_searches', JSON.stringify(updated));
+    } catch {}
+  };
+
+  const removeRecent = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = recentSearches.filter(r => r.id !== id);
+    setRecentSearches(updated);
+    try {
+      localStorage.setItem('surakshit_recent_searches', JSON.stringify(updated));
+    } catch {}
+  };
+
+  const handleSelectNearestHaven = (type: 'police' | 'hospital') => {
+    const userCoords = origin.coordinates;
+    let closestHaven = PUNE_SAFE_HAVENS[0];
+    let minD = Infinity;
+
+    PUNE_SAFE_HAVENS.forEach(haven => {
+      if (type === 'police' && haven.type !== 'police') return;
+      if (type === 'hospital' && haven.type !== 'hospital') return;
+      const dLat = (haven.coordinates[0] - userCoords[0]) * 111139;
+      const dLng = (haven.coordinates[1] - userCoords[1]) * 105000;
+      const d = dLat * dLat + dLng * dLng;
+      if (d < minD) {
+        minD = d;
+        closestHaven = haven;
+      }
+    });
+
+    const havenLoc: PuneLocation = {
+      id: closestHaven.id,
+      name: closestHaven.name,
+      subtitle: `${closestHaven.address} (${closestHaven.timing})`,
+      coordinates: closestHaven.coordinates,
+      category: 'landmark'
+    };
+    onSelectDestination(havenLoc);
+    saveToRecent(havenLoc);
+    setActiveField(null);
+  };
+
 
   const handleUseCurrentLocation = async () => {
     setIsLocatingGps(true);
@@ -63,6 +144,7 @@ export const LocationSearchBox: React.FC<Props> = ({
       onSelectOrigin(loc);
     } else {
       onSelectDestination(loc);
+      saveToRecent(loc);
     }
     setActiveField(null);
     setSearchQuery('');
@@ -299,19 +381,51 @@ export const LocationSearchBox: React.FC<Props> = ({
                 setSearchQuery('');
               }
             }}
-            aria-label={`Change Destination location: currently ${destination.name}`}
+            aria-label={destination ? `Destination: ${destination.name}` : 'Set safe destination'}
             className={`gmaps-input-card ${activeField === 'destination' ? 'focused' : ''}`}
+            style={{
+              backgroundColor: destination ? undefined : 'rgba(245, 158, 11, 0.05)',
+              borderStyle: destination ? 'solid' : 'dashed'
+            }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent-amber)', letterSpacing: '0.04em' }}>
+              <div style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', color: destination ? 'var(--accent-amber)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
                 {currentLanguage === 'mr' ? 'गंतव्य' : currentLanguage === 'hi' ? 'गंतव्य' : 'Destination'}
               </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {destination.name}
+              <div style={{ 
+                fontSize: '13px', 
+                fontWeight: destination ? 700 : 500, 
+                color: destination ? 'var(--text-primary)' : 'var(--text-muted)', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap' 
+              }}>
+                {destination ? destination.name : (currentLanguage === 'mr' ? 'सुरक्षित गंतव्य निवडा (उदा. घर, कॉलेज)...' : currentLanguage === 'hi' ? 'सुरक्षित गंतव्य चुनें (उदा. घर, कॉलेज)...' : 'Where to safely? (Search destination)...')}
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {destination && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectDestination(null);
+                  }}
+                  className="btn-civic"
+                  style={{
+                    padding: '4px 6px',
+                    backgroundColor: 'transparent',
+                    color: 'var(--text-muted)',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                  title="Clear Destination (Return to Radar View)"
+                >
+                  <X size={14} />
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={(e) => {
@@ -530,39 +644,230 @@ export const LocationSearchBox: React.FC<Props> = ({
             )}
           </div>
 
-          <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {results.length > 0 ? (
-              results.map((loc) => (
+          {/* If Search Query is Empty: Show 1-Tap Saved Places & Recent Searches */}
+          {!searchQuery.trim() ? (
+            <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Saved Places (Home & Work) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 <button
-                  key={loc.id}
                   type="button"
-                  onClick={() => handleSelectLocation(loc)}
+                  onClick={() => {
+                    if (savedHome) {
+                      handleSelectLocation(savedHome);
+                    } else if (destination) {
+                      setSavedHome(destination);
+                      localStorage.setItem('surakshit_saved_home', JSON.stringify(destination));
+                    } else {
+                      setSearchQuery('Home');
+                    }
+                  }}
                   className="btn-civic"
                   style={{
-                    justifyContent: 'flex-start',
-                    textAlign: 'left',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    borderRadius: '8px',
                     padding: '8px 10px',
-                    fontSize: '11px',
-                    backgroundColor: 'var(--surface-card)',
-                    border: '1px solid var(--border-subtle)',
-                    transition: 'all 0.15s ease'
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textAlign: 'left',
+                    cursor: 'pointer'
                   }}
                 >
-                  <div style={{ marginTop: '2px', marginRight: '8px' }}>
-                    {getCategoryIcon(loc.category)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.name}</div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.subtitle}</div>
+                  <Home size={15} color="#3b82f6" />
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#3b82f6' }}>Home</div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {savedHome ? savedHome.name : 'Tap to set'}
+                    </div>
                   </div>
                 </button>
-              ))
-            ) : (
-              <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
-                No landmarks matching "{searchQuery}"
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (savedWork) {
+                      handleSelectLocation(savedWork);
+                    } else if (destination) {
+                      setSavedWork(destination);
+                      localStorage.setItem('surakshit_saved_work', JSON.stringify(destination));
+                    } else {
+                      setSearchQuery('Work');
+                    }
+                  }}
+                  className="btn-civic"
+                  style={{
+                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    borderRadius: '8px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textAlign: 'left',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Briefcase size={15} color="#a855f7" />
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#a855f7' }}>Work / College</div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {savedWork ? savedWork.name : 'Tap to set'}
+                    </div>
+                  </div>
+                </button>
               </div>
-            )}
-          </div>
+
+              {/* 1-Tap Quick Safe Havens */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleSelectNearestHaven('police')}
+                  className="btn-civic"
+                  style={{
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    borderRadius: '8px',
+                    padding: '6px 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: 'var(--safe-emerald)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <ShieldCheck size={14} />
+                  <span>Nearest Police Chowki</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectNearestHaven('hospital')}
+                  className="btn-civic"
+                  style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    borderRadius: '8px',
+                    padding: '6px 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#ef4444',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>🏥</span>
+                  <span>Nearest 24/7 Hospital</span>
+                </button>
+              </div>
+
+              {/* Recent Searches Section */}
+              {recentSearches.length > 0 && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                      Recent Searches
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecentSearches([]);
+                        try { localStorage.removeItem('surakshit_recent_searches'); } catch {}
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '10px', cursor: 'pointer', padding: 0 }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  {recentSearches.map(item => (
+                    <div
+                      key={item.id + '_' + item.timestamp}
+                      onClick={() => handleSelectLocation({
+                        id: item.id,
+                        name: item.name,
+                        subtitle: item.subtitle,
+                        coordinates: item.coordinates,
+                        category: item.category || 'landmark'
+                      })}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '7px 8px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        marginBottom: '2px',
+                        backgroundColor: 'var(--surface-card)',
+                        transition: 'background-color 0.15s ease'
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--surface-card)')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <Clock size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            {item.name}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            {item.subtitle}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => removeRecent(item.id, e)}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                        title="Remove from history"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {results.length > 0 ? (
+                results.map((loc) => (
+                  <button
+                    key={loc.id}
+                    type="button"
+                    onClick={() => handleSelectLocation(loc)}
+                    className="btn-civic"
+                    style={{
+                      justifyContent: 'flex-start',
+                      textAlign: 'left',
+                      padding: '8px 10px',
+                      fontSize: '11px',
+                      backgroundColor: 'var(--surface-card)',
+                      border: '1px solid var(--border-subtle)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ marginTop: '2px', marginRight: '8px' }}>
+                      {getCategoryIcon(loc.category)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.name}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.subtitle}</div>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
+                  No landmarks matching "{searchQuery}"
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       {/* Option B: Resilient Fallback Location Modal when GPS is unavailable */}

@@ -188,6 +188,12 @@ export const EmergencySosModal: React.FC<Props> = ({
     .slice(0, 3);
 
   const guardians = user?.trustedGuardians || [];
+  const primaryGuardian = (guardians && guardians.length > 0) ? guardians[0] : null;
+  const cleanPrimaryPhone = primaryGuardian ? primaryGuardian.phone.replace(/\D/g, '') : '';
+  const primaryGuardianTelUrl = cleanPrimaryPhone.length >= 10 ? `tel:+91${cleanPrimaryPhone.slice(-10)}` : 'tel:112';
+  const primaryGuardianWaUrl = cleanPrimaryPhone.length >= 10 
+    ? `https://wa.me/91${cleanPrimaryPhone.slice(-10)}?text=`
+    : 'https://wa.me/?text=';
 
   return (
     <>
@@ -319,7 +325,7 @@ export const EmergencySosModal: React.FC<Props> = ({
           {/* Primary Guardian Direct Call & WhatsApp Dispatch (Mobile & Laptop Ready) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             <a
-              href="tel:+919665184535"
+              href={primaryGuardianTelUrl}
               style={{
                 textDecoration: 'none',
                 backgroundColor: 'rgba(16, 185, 129, 0.16)',
@@ -337,14 +343,14 @@ export const EmergencySosModal: React.FC<Props> = ({
                 transition: 'transform 0.1s ease',
                 cursor: 'pointer'
               }}
-              title="Place Direct Call to Primary Guardian: +91 96651 84535"
+              title={`Place Direct Call to ${primaryGuardian ? primaryGuardian.name : "National Police (112)"}`}
             >
               <PhoneCall size={16} color="var(--safe-emerald, #10b981)" />
               <span>Call Guardian</span>
             </a>
 
             <a
-              href={`https://wa.me/919665184535?text=${encodeURIComponent(
+              href={primaryGuardianWaUrl + encodeURIComponent(
                 `🚨 *SURAKSHITPATH CRITICAL SOS ALERT*\n` +
                 `Commuter: ${user?.displayName || 'Citizen Commuter'}\n` +
                 `Route: ${activeRouteName}\n` +
@@ -352,7 +358,7 @@ export const EmergencySosModal: React.FC<Props> = ({
                 `Google Maps: https://www.google.com/maps?q=${currentPosition[0]},${currentPosition[1]}\n` +
                 `Zero-Install Live Tracking: ${typeof window !== 'undefined' ? window.location.origin : ''}/?mode=track&role=guardian\n` +
                 `Immediate assistance needed! Tap to initiate voice call.`
-              )}`}
+              )}
               target="_blank"
               rel="noopener noreferrer"
               style={{

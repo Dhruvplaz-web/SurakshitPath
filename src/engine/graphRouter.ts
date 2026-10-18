@@ -1,5 +1,5 @@
 import { PUNE_NODES, PUNE_EDGES } from '../data/puneCorridorGraph';
-import { GraphEdge, RouteOption, SegmentDetail, FactorBreakdown, DynamicEvent } from '../types/routing';
+import { GraphEdge, RouteOption, SegmentDetail, FactorBreakdown, DynamicEvent, TravelProfile } from '../types/routing';
 import { calculateSegmentSafety, calculateEdgeImpedance } from './safetyScorer';
 
 interface PriorityQueueItem {
@@ -124,6 +124,26 @@ function aggregateRouteFactors(segments: SegmentDetail[], totalLength: number): 
   };
 }
 
+export const MODE_TRAVEL_CONFIG: Record<TravelProfile, { speedKmh: number; waitMinutes: number }> = {
+  pedestrian: { speedKmh: 5, waitMinutes: 0 },
+  two_wheeler: { speedKmh: 28, waitMinutes: 0 },
+  four_wheeler: { speedKmh: 24, waitMinutes: 0 },
+  transit: { speedKmh: 14, waitMinutes: 7 }
+};
+
+export const MODE_SPEEDS_KMH: Record<TravelProfile, number> = {
+  pedestrian: MODE_TRAVEL_CONFIG.pedestrian.speedKmh,
+  two_wheeler: MODE_TRAVEL_CONFIG.two_wheeler.speedKmh,
+  four_wheeler: MODE_TRAVEL_CONFIG.four_wheeler.speedKmh,
+  transit: MODE_TRAVEL_CONFIG.transit.speedKmh
+};
+
+export function calculateModeDurationMinutes(distanceMeters: number, profile: TravelProfile = 'pedestrian'): number {
+  const config = MODE_TRAVEL_CONFIG[profile] ?? MODE_TRAVEL_CONFIG.pedestrian;
+  const distanceKm = distanceMeters / 1000;
+  return Math.max(1, Math.round((distanceKm / config.speedKmh) * 60 + config.waitMinutes));
+}
+
 /**
  * Converts a series of graph edges into a unified RouteOption with segment details
  */
@@ -137,7 +157,8 @@ export function buildRouteOption(
   activeEvents: DynamicEvent[] = [],
   nodeSequence?: string[],
   originCoords?: [number, number],
-  destCoords?: [number, number]
+  destCoords?: [number, number],
+  profile: TravelProfile = 'pedestrian'
 ): RouteOption {
   let totalLengthMeters = 0;
   const coordinates: [number, number][] = [];
@@ -228,10 +249,8 @@ export function buildRouteOption(
 
   const factors = aggregateRouteFactors(segments, totalLengthMeters);
   
-  // Calculate realistic travel time based on road classes (average night speed ~32 km/h highway, 18 km/h city)
-  // Converting to minutes
-  const speedKmh = routeType === 'fastest' ? 26 : 30; // Arterials allow faster flow despite extra distance
-  const durationMinutes = Math.round((totalLengthMeters / 1000) / speedKmh * 60);
+  // Calculate realistic travel time based on selected travel mode
+  const durationMinutes = calculateModeDurationMinutes(totalLengthMeters, profile);
 
   // Generate transparent XAI explanation reasons
   const reasons: string[] = [];
@@ -255,6 +274,7 @@ export function buildRouteOption(
     name,
     tagline,
     routeType,
+    travelProfile: profile,
     distanceMeters: totalLengthMeters,
     durationMinutes,
     safetyScore: factors.compositeScore,
@@ -340,7 +360,8 @@ export function calculateStatewideRoutes(
   beta: number,
   activeEvents: DynamicEvent[] = [],
   origin: [number, number],
-  dest: [number, number]
+  dest: [number, number],
+  profile: TravelProfile = 'pedestrian'
 ): { fastest: RouteOption; safe: RouteOption; balanced: RouteOption } {
   const dLat = (dest[0] - origin[0]) * 111000;
   const dLng = (dest[1] - origin[1]) * 105000;
@@ -352,7 +373,7 @@ export function calculateStatewideRoutes(
   // 1. Safe Route: 6-Lane Expressway & National Arterials (Continuous High-Mast Lighting)
   const safeCoords = generateCurvedPath(origin, dest, 24, 0.08);
   const safeDistance = Math.round(baseRoadDistance * 1.08); // Slight detour for lighted expressway
-  const safeDuration = Math.round((safeDistance / 1000) / 78 * 60); // 78 km/h expressway speed
+  const safeDuration = calculateModeDurationMinutes(safeDistance, profile);
   const safeFactors: FactorBreakdown = {
     lighting: 0.88,
     activity: 0.82,
@@ -400,6 +421,7 @@ export function calculateStatewideRoutes(
     name: 'Route 2 · Surakshit National Highway (Recommended)',
     tagline: 'Maximizes illuminated 6-lane expressways, 24/7 food plazas, and highway police patrol units',
     routeType: 'safe',
+    travelProfile: profile,
     distanceMeters: safeDistance,
     durationMinutes: safeDuration,
     safetyScore: safeFactors.compositeScore,
@@ -418,7 +440,7 @@ export function calculateStatewideRoutes(
   // 2. Fastest Route: Direct State Highway Cut (Traverses darker ghats/rural bypasses)
   const fastestCoords = generateCurvedPath(origin, dest, 20, -0.05);
   const fastestDistance = baseRoadDistance;
-  const fastestDuration = Math.round((fastestDistance / 1000) / 62 * 60); // 62 km/h rural road speed
+  const fastestDuration = calculateModeDurationMinutes(fastestDistance, profile);
   const fastestFactors: FactorBreakdown = {
     lighting: 0.32,
     activity: 0.28,
@@ -456,6 +478,7 @@ export function calculateStatewideRoutes(
     name: 'Route 1 · Direct Cut (Fastest)',
     tagline: 'Shorter distance, but cuts through unmonitored interior ghats and unlit state roads',
     routeType: 'fastest',
+    travelProfile: profile,
     distanceMeters: fastestDistance,
     durationMinutes: fastestDuration,
     safetyScore: 46,
@@ -473,7 +496,7 @@ export function calculateStatewideRoutes(
   // 3. Balanced Route: Arterial MSRTC Transit Corridor
   const balancedCoords = generateCurvedPath(origin, dest, 22, 0.02);
   const balancedDistance = Math.round(baseRoadDistance * 1.03);
-  const balancedDuration = Math.round((balancedDistance / 1000) / 68 * 60);
+  const balancedDuration = calculateModeDurationMinutes(balancedDistance, profile);
   const balancedFactors: FactorBreakdown = {
     lighting: 0.72,
     activity: 0.68,
@@ -501,6 +524,7 @@ export function calculateStatewideRoutes(
     name: 'Route 3 · MSRTC Transit Corridor',
     tagline: 'Balanced travel time along major state bus routes with regular transit hubs',
     routeType: 'balanced',
+    travelProfile: profile,
     distanceMeters: balancedDistance,
     durationMinutes: balancedDuration,
     safetyScore: 75,
@@ -530,11 +554,12 @@ export function calculatePuneRoutes(
   beta: number,
   activeEvents: DynamicEvent[] = [],
   originCoords?: [number, number],
-  destCoords?: [number, number]
+  destCoords?: [number, number],
+  profile: TravelProfile = 'pedestrian'
 ): { fastest: RouteOption; safe: RouteOption; balanced: RouteOption } {
   // If coordinates extend across Maharashtra or outside local Pune testbed, use statewide routing engine
   if (isStatewideRoute(originCoords, destCoords) && originCoords && destCoords) {
-    return calculateStatewideRoutes(beta, activeEvents, originCoords, destCoords);
+    return calculateStatewideRoutes(beta, activeEvents, originCoords, destCoords, profile);
   }
 
   const originNodeId = originCoords ? findNearestGraphNode(originCoords) : 'node_jspm';
@@ -557,7 +582,8 @@ export function calculatePuneRoutes(
     activeEvents,
     fastestResult?.nodeSequence,
     originCoords,
-    destCoords
+    destCoords,
+    profile
   );
 
   // 2. High-Visibility Route (user beta, default 0.8)
@@ -574,7 +600,8 @@ export function calculatePuneRoutes(
     activeEvents,
     safeResult?.nodeSequence,
     originCoords,
-    destCoords
+    destCoords,
+    profile
   );
 
   // 3. Balanced Transit Corridor
@@ -596,7 +623,8 @@ export function calculatePuneRoutes(
     activeEvents,
     balancedResult?.nodeSequence,
     originCoords,
-    destCoords
+    destCoords,
+    profile
   );
 
   return {

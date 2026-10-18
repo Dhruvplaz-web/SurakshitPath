@@ -30,12 +30,14 @@ export function evaluateTelemetryAnomaly(
   isSimulationFastForward: boolean = true
 ): { hasAnomaly: boolean; reason: 'deviation' | 'stationary' | null } {
   // Deviation threshold: 50 meters
-  if (telemetry.crossTrackDistanceMeters > 50) {
+  // Deviation threshold: 85 meters (filters out urban GPS multipath jitter)
+  if (telemetry.crossTrackDistanceMeters > 85) {
     return { hasAnomaly: true, reason: 'deviation' };
   }
 
   // Stationary threshold: in demo mode, 8 seconds of stationary stall; in production, 120s
-  const stallThreshold = isSimulationFastForward ? 8 : 120;
+  // Stationary dwell threshold: 10s for simulation, 240s (4 min) for production to prevent false alarms at traffic lights
+  const stallThreshold = isSimulationFastForward ? 10 : 240;
   if (telemetry.isStationary && telemetry.dwellTimeSeconds >= stallThreshold) {
     return { hasAnomaly: true, reason: 'stationary' };
   }
@@ -59,7 +61,7 @@ export async function dispatchEmergencyAlert(
     event: 'EMERGENCY_SOS_TRIGGERED',
     timestamp: now,
     studentName: 'Dhruv / Commuter (SurakshitPath)',
-    reason: anomalyState.reason === 'deviation' ? 'Critical Route Deviation (>50m off safe corridor)' : 'Prolonged Unexpected Stall (>2 min)',
+    reason: anomalyState.reason === 'deviation' ? 'Critical Route Deviation (>85m off safe corridor)' : 'Prolonged Unexpected Stall (>4 min)',
     coordinates: { lat, lng },
     mapsLink,
     activeRoute: route.name,

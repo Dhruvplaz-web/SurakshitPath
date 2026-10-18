@@ -10,6 +10,7 @@ interface Props {
     fastest: RouteOption;
     safe: RouteOption;
     balanced: RouteOption;
+    transit?: RouteOption;
   };
   activeRouteId: string;
   onSelectRoute: (id: string) => void;
@@ -29,16 +30,17 @@ export const RouteComparisonCard: React.FC<Props> = ({
   currentLanguage = 'en'
 }) => {
   const t = getTranslation(currentLanguage);
-  const routeList = [routes.safe, routes.fastest, routes.balanced];
+  const routeList = [routes.safe, routes.balanced, routes.fastest, ...(routes.transit ? [routes.transit] : [])].filter(Boolean);
 
   // Pre-calculate real-time corridor shelter metrics for each candidate route
-  const shelterMetricsMap = useMemo(() => {
+  const shelterMetricsMap: Record<string, ReturnType<typeof analyzeRouteShelters>> = useMemo(() => {
     return {
       safe: analyzeRouteShelters(routes.safe.coordinates, PUNE_SAFE_HAVENS),
       fastest: analyzeRouteShelters(routes.fastest.coordinates, PUNE_SAFE_HAVENS),
-      balanced: analyzeRouteShelters(routes.balanced.coordinates, PUNE_SAFE_HAVENS)
+      balanced: analyzeRouteShelters(routes.balanced.coordinates, PUNE_SAFE_HAVENS),
+      ...(routes.transit ? { transit: analyzeRouteShelters(routes.transit.coordinates, PUNE_SAFE_HAVENS) } : {})
     };
-  }, [routes.safe.coordinates, routes.fastest.coordinates, routes.balanced.coordinates]);
+  }, [routes.safe.coordinates, routes.fastest.coordinates, routes.balanced.coordinates, routes.transit?.coordinates]);
 
   const getScoreColor = (score: number) => {
     if (score >= 75) return 'var(--safe-emerald)';
@@ -64,6 +66,13 @@ export const RouteComparisonCard: React.FC<Props> = ({
         return {
           icon: <Bus size={13} color="var(--haven-blue)" />,
           label: `${t.balancedRoute} · ${currentLanguage === 'mr' ? 'मेट्रो व बस कॉरिडोअर' : currentLanguage === 'hi' ? 'मेट्रो एवं बस कॉरिडोर' : 'Metro Transit'}`,
+          className: 'gmaps-badge-balanced'
+        };
+      case 'transit':
+      default:
+        return {
+          icon: <Bus size={13} color="var(--haven-blue)" />,
+          label: `${currentLanguage === 'mr' ? 'सार्वजनिक वाहतूक कॉरिडोअर' : currentLanguage === 'hi' ? 'सार्वजनिक परिवहन कॉरिडोर' : 'Transit Boulevard'} · ${currentLanguage === 'mr' ? 'हायवे व बस' : currentLanguage === 'hi' ? 'हाईवे एवं बस' : 'Highways & Hubs'}`,
           className: 'gmaps-badge-balanced'
         };
     }

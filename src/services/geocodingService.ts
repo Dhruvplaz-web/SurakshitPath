@@ -565,12 +565,12 @@ export async function searchPuneLocations(
   query: string, 
   regionFilter: MaharashtraRegion = 'all'
 ): Promise<PuneLocation[]> {
-  const trimmed = query.trim().toLowerCase();
+  const sanitized = query.replace(/[<>'";&]/g, '').trim().slice(0, 100);
+  const trimmed = sanitized.toLowerCase();
 
   // If query is empty, provide balanced, high-priority recommendations across Maharashtra
   if (!trimmed) {
     if (regionFilter === 'all') {
-      // Pick representative hubs across Pune, Mumbai, Nashik, Marathwada, Vidarbha
       const curatedPickIds = [
         'loc_jspm_tathawade',
         'loc_mumbai_bkc',
@@ -587,7 +587,7 @@ export async function searchPuneLocations(
     return MAHARASHTRA_LANDMARKS.filter(l => l.region === regionFilter).slice(0, 8);
   }
 
-  // 1. Instant local search across all 36 Maharashtra districts
+  // 1. Instant local search across curated landmarks
   const localMatches = MAHARASHTRA_LANDMARKS.filter(loc => {
     const matchesRegion = regionFilter === 'all' || loc.region === regionFilter;
     const matchesText = loc.name.toLowerCase().includes(trimmed) || 
@@ -595,60 +595,87 @@ export async function searchPuneLocations(
     return matchesRegion && matchesText;
   });
 
-  if (localMatches.length >= 5) {
-    return localMatches.slice(0, 10);
+  if (localMatches.length >= 4 && (trimmed.length <= 4 || localMatches[0].name.toLowerCase().startsWith(trimmed))) {
+    return localMatches.slice(0, 8);
   }
 
-  // 2. Live OpenStreetMap Nominatim geocoding with Maharashtra Bounding Box (72.6, 15.6, 80.9, 22.1)
-  let timeout: ReturnType<typeof setTimeout> | null = null;
+  // 2. Pan-India Live Search via Photon API (Fast, Free, No State Bias)
   try {
     const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 2200);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-    const searchQuery = trimmed.includes('maharashtra') || trimmed.includes('pune') || trimmed.includes('mumbai')
-      ? `${query}, India`
-      : `${query}, Maharashtra, India`;
-
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-      searchQuery
-    )}&viewbox=72.6,22.1,80.9,15.6&bounded=0&limit=8`;
-
-    const res = await fetch(url, {
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lang=en`;
+    const res = await fetch(photonUrl, {
       signal: controller.signal,
       headers: { 'Accept': 'application/json' }
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
-      const nominatimLocations: PuneLocation[] = (data || []).map((item: any) => {
-        const parts = item.display_name.split(',');
-        const primary = parts[0];
-        const rest = parts.slice(1, 4).join(',').trim();
-        return {
-          id: `nom_${item.place_id}`,
-          name: primary,
-          subtitle: rest || 'Maharashtra, India',
-          coordinates: [parseFloat(item.lat), parseFloat(item.lon)],
-          category: 'statewide',
-          region: 'statewide'
-        };
-      });
+      if (data && data.features && data.features.length > 0) {
+        const photonLocations: PuneLocation[] = data.features.map((f: any, idx: number) => {
+          const props = f.properties || {};
+          const coords: [number, number] = [
+            Number(f.geometry.coordinates[1].toFixed(5)),
+            Number(f.geometry.coordinates[0].toFixed(5))
+          ];
+          const name = props.name || props.street || query;
+          const subtitleParts = [props.street, props.district, props.city, props.state, props.postcode].filter(Boolean);
+          const subtitle = subtitleParts.length > 0 ? subtitleParts.join(', ') : 'India';
 
-      const combined = [...localMatches];
-      for (const nom of nominatimLocations) {
-        if (!combined.some(c => Math.abs(c.coordinates[0] - nom.coordinates[0]) < 0.005 && Math.abs(c.coordinates[1] - nom.coordinates[1]) < 0.005)) {
-          combined.push(nom);
-        }
+          return {
+            id: `photon_${coords[0]}_${coords[1]}_${idx}`,
+            name,
+            subtitle,
+            coordinates: coords,
+            category: 'landmark',
+            region: 'all'
+          };
+        });
+
+        // Prepend any strong local matches
+        return [...localMatches.slice(0, 2), ...photonLocations].slice(0, 8);
       }
-      return combined.slice(0, 10);
     }
   } catch {
-    // Return local matches safely
-  } finally {
-    if (timeout) clearTimeout(timeout);
+    // Photon timeout, fallback to Nominatim
   }
 
-  return localMatches;
+  // 3. Fallback: OpenStreetMap Nominatim Pan-India Geocoding
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', India')}&limit=8`;
+    const res = await fetch(nominatimUrl, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const nomLocations: PuneLocation[] = data.map((item: any, idx: number) => ({
+          id: `nom_${item.place_id || idx}`,
+          name: item.display_name.split(',')[0].trim(),
+          subtitle: item.display_name.split(',').slice(1, 4).join(',').trim(),
+          coordinates: [
+            Number(parseFloat(item.lat).toFixed(5)),
+            Number(parseFloat(item.lon).toFixed(5))
+          ],
+          category: 'landmark',
+          region: 'all'
+        }));
+        return nomLocations;
+      }
+    }
+  } catch {
+    // Return local matches if network fails
+  }
+
+  return localMatches.slice(0, 8);
 }
 
 export function parseCoordinates(query: string): [number, number] | null {
@@ -847,9 +874,9 @@ export function watchUserLiveLocation(
       if (onError) onError(err);
     },
     {
-      enableHighAccuracy: false,
-      maximumAge: 5000,
-      timeout: 8000
+      enableHighAccuracy: true, // Use real GPS satellite/chip positioning
+      maximumAge: 2000,
+      timeout: 10000
     }
   );
 
