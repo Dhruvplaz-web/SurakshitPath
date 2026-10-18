@@ -22,6 +22,7 @@ interface Props {
   onOpenCabShield?: () => void;
   onOpenShelters?: (category?: ShelterCategoryOption) => void;
   onOpenFakeCall?: () => void;
+  onOpenKavachCockpit?: () => void;
   onLockSafeHaven?: (haven: SafeHaven) => void;
   currentCoordinates?: [number, number];
   userCoordinates?: [number, number];

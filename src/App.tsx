@@ -10,6 +10,8 @@ import { LocationSearchBox } from './components/Sidebar/LocationSearchBox';
 import { QuickSafeHavenButton } from './components/Sidebar/QuickSafeHavenButton';
 import { SafeSheltersModal, FilterCategory } from './components/Sidebar/SafeSheltersModal';
 import { NearestPoliceCard } from './components/Sidebar/NearestPoliceCard';
+import { ExplainabilityRadar } from './components/Sidebar/ExplainabilityRadar';
+import { TreeShapWaterfall } from './components/Sidebar/TreeShapWaterfall';
 import { CivicAdminDashboard } from './components/Admin/CivicAdminDashboard';
 import { INITIAL_CITIZEN_REPORTS } from './data/civicAdminData';
 import { VolunteerCockpit } from './components/Volunteer/VolunteerCockpit';
@@ -17,6 +19,7 @@ import { ReportHazardModal } from './components/Community/ReportHazardModal';
 import { RouteShareModal } from './components/Sidebar/RouteShareModal';
 import { MapCockpit } from './components/Map/MapCockpit';
 import { calculatePuneRoutes } from './engine/graphRouter';
+import { getRoadAlignedRoutes } from './services/roadRoutingService';
 import { calculateCrossTrackDistance, evaluateTelemetryAnomaly } from './engine/telemetryWatchdog';
 import { TelematicsKalmanFilter } from './engine/kalmanFilter';
 import { audioGuidance } from './services/audioGuidance';
@@ -25,7 +28,6 @@ import { DynamicEvent, TelemetryState, AnomalyCheckState, RouteOption, SafeHaven
 import { createDynamicEventFromReport } from './services/hazardService';
 import { ZeroInstallGuardianView } from './components/Guardian/ZeroInstallGuardianView';
 import { PUNE_LANDMARKS, PuneLocation, getUserCurrentLocation, reverseGeocode, watchUserLiveLocation } from './services/geocodingService';
-import { fetchRealRoadGeometry, RoadCurvatureResult } from './services/roadCurvatureService';
 import { PUNE_SAFE_HAVENS } from './data/safeHavens';
 import { getKnownSafeHavensSync, fetchLiveSafeHavens } from './services/liveShelterService';
 import { 
@@ -36,7 +38,7 @@ import {
   PUNE_VERIFIED_ROADWORKS 
 } from './services/liveClosureService';
 import { WeatherRiskProfile, WEATHER_PROFILES } from './components/Commuter/NocturnalWeatherCard';
-import { AlertCircle, ArrowRight, ChevronDown, ChevronUp, Sliders, ListFilter, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, ChevronDown, ChevronUp, Sliders, ListFilter, PanelLeftClose, PanelLeftOpen, ShieldCheck, Cpu } from 'lucide-react';
 import { PrivacyPolicyModal } from './components/Legal/PrivacyPolicyModal';
 import { TermsOfServiceModal } from './components/Legal/TermsOfServiceModal';
 import { CookiePolicyModal } from './components/Legal/CookiePolicyModal';
@@ -57,6 +59,8 @@ import { CabRideShieldModal } from './components/Commuter/CabRideShieldModal';
 import { TripFeedbackModal } from './components/Commuter/TripFeedbackModal';
 import { StreetViewModal, StreetViewData } from './components/Map/StreetViewModal';
 import { getStreetViewDataForSegment } from './data/streetViewData';
+import { SafetyCheckModal } from './components/Simulation/SafetyCheckModal';
+import { SurakshitKavachCockpit } from './components/Hardware/SurakshitKavachCockpit';
 
 export const App: React.FC = () => {
   // Read initial state from URL parameters (URL-First State Architecture with Boundary Validation)
@@ -71,7 +75,7 @@ export const App: React.FC = () => {
     const originParam = params.get('origin');
     const destParam = params.get('dest');
     
-    const validRoles: UserRole[] = ['commuter', 'volunteer', 'admin'];
+    const validRoles: UserRole[] = ['commuter', 'guardian', 'volunteer', 'admin'];
     const rawRole = params.get('role') as UserRole;
     const roleParam = validRoles.includes(rawRole) ? rawRole : 'commuter';
 
@@ -143,23 +147,10 @@ export const App: React.FC = () => {
       return fallback;
     };
 
-    // Default origin: User's live GPS location
-    const defaultOrigin: PuneLocation = {
-      id: 'gps_my_location',
-      name: '📍 Your Current Location',
-      subtitle: 'Live Device GPS (Detecting...)',
-      coordinates: [18.5204, 73.8567],
-      category: 'landmark'
-    };
-
-    // Default destination: FC Road, Shivajinagar
-    const defaultDest: PuneLocation = {
-      id: 'loc_fc_road',
-      name: 'Fergusson College Road (FC Road)',
-      subtitle: 'Deccan Gymkhana / Shivajinagar, Pune',
-      coordinates: [18.5204, 73.8402],
-      category: 'college'
-    };
+    // Default origin: Tathawade
+    const defaultOrigin = PUNE_LANDMARKS[0];
+    // Default destination: Kothrud
+    const defaultDest = PUNE_LANDMARKS[13] || PUNE_LANDMARKS[1];
 
     const originLoc = originParam ? resolveLocation(originParam, defaultOrigin) : defaultOrigin;
     const destLoc = destParam ? resolveLocation(destParam, defaultDest) : defaultDest;
@@ -194,6 +185,7 @@ export const App: React.FC = () => {
       window.history.replaceState({}, '', url.toString());
     }
   }, [user?.role, userRole]);
+
   const [travelProfile, setTravelProfile] = useState<TravelProfile>(initialParams.profile);
   const [isTrackingMode, setIsTrackingMode] = useState<boolean>(initialParams.isTracking);
   const [trackingTripId] = useState<string>(initialParams.tripId);
@@ -215,11 +207,14 @@ export const App: React.FC = () => {
   const [citizenReports, setCitizenReports] = useState<CitizenReport[]>(INITIAL_CITIZEN_REPORTS);
   const [isSheltersModalOpen, setIsSheltersModalOpen] = useState(false);
   const [sheltersInitialCategory, setSheltersInitialCategory] = useState<FilterCategory>('all');
+  const [isFakeCallOpen, setIsFakeCallOpen] = useState(false);
+  const [isShareLocationModalOpen, setIsShareLocationModalOpen] = useState(false);
+  const [isKavachModalOpen, setIsKavachModalOpen] = useState(false);
 
-  // Real-time Nocturnal Weather Risk Simulation Profile (Idea 2)
+  // Real-time Nocturnal Weather Risk Simulation Profile
   const [weatherProfile, setWeatherProfile] = useState<WeatherRiskProfile>(WEATHER_PROFILES.clear);
 
-  // Closed-Loop Civic Resolution Notification Toast (Idea 3 - SDG 11)
+  // Closed-Loop Civic Resolution Notification Toast
   const [civicToast, setCivicToast] = useState<{
     title: string;
     detail: string;
@@ -245,8 +240,7 @@ export const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isBetaOpen, setIsBetaOpen] = useState(false);
   const [isSegmentsOpen, setIsSegmentsOpen] = useState(false);
-  const [isFakeCallOpen, setIsFakeCallOpen] = useState(false);
-  const [isShareLocationModalOpen, setIsShareLocationModalOpen] = useState(false);
+  const [isExplainOpen, setIsExplainOpen] = useState(false);
 
   // Synchronize data-theme on root HTML and URL/LocalStorage
   useEffect(() => {
@@ -338,21 +332,17 @@ export const App: React.FC = () => {
     });
   };
 
-  // Auto-acquire user's live GPS location on startup if origin was not explicitly fixed in URL
+  // Auto-acquire user's live GPS location on startup if origin was explicitly requested as GPS
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlOrigin = params.get('origin');
-    if (!urlOrigin || urlOrigin === 'gps' || urlOrigin === 'gps_my_location') {
+    if (urlOrigin === 'gps' || urlOrigin === 'gps_my_location') {
       getUserCurrentLocation()
         .then(loc => {
           setOrigin(loc);
         })
         .catch(err => {
           console.log('GPS waiting for user trigger/permission:', err);
-          setOrigin(prev => ({
-            ...prev,
-            subtitle: 'Tap GPS button or search place/coordinates'
-          }));
         });
     }
   }, []);
@@ -370,103 +360,66 @@ export const App: React.FC = () => {
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
   }, [userRole, currentLanguage, beta, activeRouteId, origin, destination, travelProfile]);
 
-  // Dynamic Real Road Curvature State
-  const [curvedGeometry, setCurvedGeometry] = useState<{
-    safe?: RoadCurvatureResult;
-    fastest?: RoadCurvatureResult;
-    balanced?: RoadCurvatureResult;
-  }>({});
+  // Calculate Pune & Maharashtra routes: initialized immediately with local road-aligned geometry,
+  // then asynchronously upgraded with live OpenStreetMap OSRM real-road geometry
+  const [routes, setRoutes] = useState<{ fastest: RouteOption; safe: RouteOption; balanced: RouteOption }>(() => {
+    return calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile);
+  });
 
-  // Asynchronously fetch real road network geometry with turns and curves for ANY origin & destination coordinates
   useEffect(() => {
     let isCancelled = false;
 
-    async function loadRoadCurvature() {
-      try {
-        const [safeRes, fastestRes, balancedRes] = await Promise.all([
-          fetchRealRoadGeometry(origin.coordinates, destination.coordinates, travelProfile, 'safe'),
-          fetchRealRoadGeometry(origin.coordinates, destination.coordinates, travelProfile, 'fastest'),
-          fetchRealRoadGeometry(origin.coordinates, destination.coordinates, travelProfile, 'balanced')
-        ]);
-
-        if (!isCancelled) {
-          setCurvedGeometry({
-            safe: safeRes,
-            fastest: fastestRes,
-            balanced: balancedRes
-          });
-        }
-      } catch (err) {
-        console.warn('Real road curvature loading fallback:', err);
+    // Immediately provide local road-aligned routes
+    const immediateRoutes = calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile);
+    
+    // Apply weather risk multiplier if nocturnal weather active
+    if (weatherProfile && weatherProfile.mode !== 'clear') {
+      const { lightingMultiplier, scorePenalty } = weatherProfile;
+      immediateRoutes.safe.safetyScore = Math.max(25, immediateRoutes.safe.safetyScore - scorePenalty);
+      if (immediateRoutes.safe.factors) {
+        immediateRoutes.safe.factors.lighting = Number((immediateRoutes.safe.factors.lighting * lightingMultiplier).toFixed(2));
+      }
+      immediateRoutes.fastest.safetyScore = Math.max(10, immediateRoutes.fastest.safetyScore - Math.round(scorePenalty * 1.4));
+      if (immediateRoutes.fastest.factors) {
+        immediateRoutes.fastest.factors.lighting = Number((immediateRoutes.fastest.factors.lighting * lightingMultiplier).toFixed(2));
+      }
+      immediateRoutes.balanced.safetyScore = Math.max(20, immediateRoutes.balanced.safetyScore - scorePenalty);
+      if (immediateRoutes.balanced.factors) {
+        immediateRoutes.balanced.factors.lighting = Number((immediateRoutes.balanced.factors.lighting * lightingMultiplier).toFixed(2));
       }
     }
+    setRoutes(immediateRoutes);
 
-    loadRoadCurvature();
+    // Asynchronously upgrade with live OSRM real-road geometry
+    getRoadAlignedRoutes(origin.coordinates, destination.coordinates, beta, dynamicEvents, travelProfile)
+      .then(liveRoutes => {
+        if (!isCancelled && liveRoutes) {
+          if (weatherProfile && weatherProfile.mode !== 'clear') {
+            const { lightingMultiplier, scorePenalty } = weatherProfile;
+            liveRoutes.safe.safetyScore = Math.max(25, liveRoutes.safe.safetyScore - scorePenalty);
+            if (liveRoutes.safe.factors) {
+              liveRoutes.safe.factors.lighting = Number((liveRoutes.safe.factors.lighting * lightingMultiplier).toFixed(2));
+            }
+            liveRoutes.fastest.safetyScore = Math.max(10, liveRoutes.fastest.safetyScore - Math.round(scorePenalty * 1.4));
+            if (liveRoutes.fastest.factors) {
+              liveRoutes.fastest.factors.lighting = Number((liveRoutes.fastest.factors.lighting * lightingMultiplier).toFixed(2));
+            }
+            liveRoutes.balanced.safetyScore = Math.max(20, liveRoutes.balanced.safetyScore - scorePenalty);
+            if (liveRoutes.balanced.factors) {
+              liveRoutes.balanced.factors.lighting = Number((liveRoutes.balanced.factors.lighting * lightingMultiplier).toFixed(2));
+            }
+          }
+          setRoutes(liveRoutes);
+        }
+      })
+      .catch(() => {
+        // Keeps immediateRoutes safely
+      });
 
     return () => {
       isCancelled = true;
     };
-  }, [origin.coordinates, destination.coordinates, travelProfile]);
-
-  // Calculate Pune routes on demand for selected origin and destination, augmented with real curved geometry
-  const routes = useMemo(() => {
-    const base = calculatePuneRoutes(beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile);
-
-    if (curvedGeometry.safe && curvedGeometry.safe.coordinates.length > 2) {
-      base.safe.coordinates = curvedGeometry.safe.coordinates;
-      base.safe.distanceMeters = curvedGeometry.safe.distanceMeters;
-      base.safe.durationMinutes = curvedGeometry.safe.durationMinutes;
-      base.safe.maneuvers = curvedGeometry.safe.maneuvers;
-      base.safe.isRecommendedNightRoute = curvedGeometry.safe.isRecommendedNightRoute;
-      if (curvedGeometry.safe.safetyScore !== undefined) base.safe.safetyScore = curvedGeometry.safe.safetyScore;
-      if (curvedGeometry.safe.factors) base.safe.factors = curvedGeometry.safe.factors;
-      if (curvedGeometry.safe.segments && curvedGeometry.safe.segments.length > 0) base.safe.segments = curvedGeometry.safe.segments;
-    }
-
-    if (curvedGeometry.fastest && curvedGeometry.fastest.coordinates.length > 2) {
-      base.fastest.coordinates = curvedGeometry.fastest.coordinates;
-      base.fastest.distanceMeters = curvedGeometry.fastest.distanceMeters;
-      base.fastest.durationMinutes = curvedGeometry.fastest.durationMinutes;
-      base.fastest.maneuvers = curvedGeometry.fastest.maneuvers;
-      base.fastest.isRecommendedNightRoute = curvedGeometry.fastest.isRecommendedNightRoute;
-      base.fastest.warningNotice = curvedGeometry.fastest.warningNotice;
-      if (curvedGeometry.fastest.safetyScore !== undefined) base.fastest.safetyScore = curvedGeometry.fastest.safetyScore;
-      if (curvedGeometry.fastest.factors) base.fastest.factors = curvedGeometry.fastest.factors;
-      if (curvedGeometry.fastest.segments && curvedGeometry.fastest.segments.length > 0) base.fastest.segments = curvedGeometry.fastest.segments;
-    }
-
-    if (curvedGeometry.balanced && curvedGeometry.balanced.coordinates.length > 2) {
-      base.balanced.coordinates = curvedGeometry.balanced.coordinates;
-      base.balanced.distanceMeters = curvedGeometry.balanced.distanceMeters;
-      base.balanced.durationMinutes = curvedGeometry.balanced.durationMinutes;
-      base.balanced.maneuvers = curvedGeometry.balanced.maneuvers;
-      base.balanced.isRecommendedNightRoute = curvedGeometry.balanced.isRecommendedNightRoute;
-      if (curvedGeometry.balanced.safetyScore !== undefined) base.balanced.safetyScore = curvedGeometry.balanced.safetyScore;
-      if (curvedGeometry.balanced.factors) base.balanced.factors = curvedGeometry.balanced.factors;
-      if (curvedGeometry.balanced.segments && curvedGeometry.balanced.segments.length > 0) base.balanced.segments = curvedGeometry.balanced.segments;
-    }
-
-    // IDEA 2: Weather & Monsoon Night Risk Multiplier
-    if (weatherProfile && weatherProfile.mode !== 'clear') {
-      const { lightingMultiplier, scorePenalty } = weatherProfile;
-      base.safe.safetyScore = Math.max(25, base.safe.safetyScore - scorePenalty);
-      if (base.safe.factors) {
-        base.safe.factors.lighting = Number((base.safe.factors.lighting * lightingMultiplier).toFixed(2));
-      }
-
-      base.fastest.safetyScore = Math.max(10, base.fastest.safetyScore - Math.round(scorePenalty * 1.4));
-      if (base.fastest.factors) {
-        base.fastest.factors.lighting = Number((base.fastest.factors.lighting * lightingMultiplier).toFixed(2));
-      }
-
-      base.balanced.safetyScore = Math.max(20, base.balanced.safetyScore - scorePenalty);
-      if (base.balanced.factors) {
-        base.balanced.factors.lighting = Number((base.balanced.factors.lighting * lightingMultiplier).toFixed(2));
-      }
-    }
-
-    return base;
-  }, [beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile, curvedGeometry, weatherProfile]);
+  }, [beta, dynamicEvents, origin.coordinates, destination.coordinates, travelProfile, weatherProfile]);
 
   // Active Route
   const activeRoute: RouteOption = useMemo(() => {
@@ -515,7 +468,6 @@ export const App: React.FC = () => {
   });
 
   // Real-time Active Commuter Coordinates:
-  // When simulating or live GPS is tracking, uses live telemetry position; otherwise dynamically locks to origin coordinates
   const activeUserCoordinates: [number, number] = useMemo(() => {
     if (isSimulating || isLiveGpsActive) {
       return telemetry.currentPosition;
@@ -562,7 +514,7 @@ export const App: React.FC = () => {
     );
   }, []);
 
-  // Real-Time Live GPS Corridor Watchdog (Continuous Hardware GPS Streaming)
+  // Real-Time Live GPS Corridor Watchdog
   useEffect(() => {
     if (!isLiveGpsActive) return;
 
@@ -571,8 +523,7 @@ export const App: React.FC = () => {
     );
 
     const stopWatch = watchUserLiveLocation(
-      (rawCoords, accuracy) => {
-        // Extended Kalman Filter smoothing against multi-path and street canyon reflections
+      (rawCoords: [number, number], accuracy: number) => {
         const kalmanResult = kalmanFilterRef.current.update(rawCoords, accuracy);
         const smoothedPos = kalmanResult.smoothedCoords;
         const crossTrack = calculateCrossTrackDistance(smoothedPos, activeRoute);
@@ -592,12 +543,11 @@ export const App: React.FC = () => {
           };
         });
 
-        // Instant Anomaly Trigger: straying > 50m off route corridor
         if (crossTrack > 50 && !anomalyState.isOpen) {
           triggerAnomalyCheck('deviation');
         }
       },
-      (err) => {
+      (err: GeolocationPositionError) => {
         console.warn('[Watchdog] Geolocation error:', err.message);
       }
     );
@@ -607,7 +557,7 @@ export const App: React.FC = () => {
     };
   }, [isLiveGpsActive, activeRoute, anomalyState.isOpen, triggerAnomalyCheck]);
 
-  // Stationary Dwell Anomaly Watchdog: 180s (3 minutes) in isolated/unlit segment
+  // Stationary Dwell Anomaly Watchdog: 180s (3 minutes) in isolated segment
   useEffect(() => {
     if (!isLiveGpsActive || anomalyState.isOpen) return;
     if (telemetry.isStationary && telemetry.dwellTimeSeconds >= 180) {
@@ -635,7 +585,6 @@ export const App: React.FC = () => {
       );
 
       const rawPos = coords[coordIndex];
-      // Extended Kalman Filter smoothing against multipath reflections & canyon noise
       const kalmanResult = kalmanFilterRef.current.update(rawPos, 8);
       const smoothedPos = kalmanResult.smoothedCoords;
       const crossTrack = calculateCrossTrackDistance(smoothedPos, activeRoute);
@@ -688,7 +637,6 @@ export const App: React.FC = () => {
     }
     setIsPickingOnMap(null);
 
-    // Asynchronously resolve street/neighborhood name
     try {
       const enriched = await reverseGeocode(coords);
       enriched.id = coordId;
@@ -709,7 +657,7 @@ export const App: React.FC = () => {
     };
 
     setDestination(havenLocation);
-    setBeta(1.2); // Set maximum safe corridor impedance
+    setBeta(1.2);
     setActiveRouteId('route_safe');
 
     audioGuidance.speakSafetyCue(
@@ -728,7 +676,7 @@ export const App: React.FC = () => {
     };
 
     setDestination(policeLocation);
-    setBeta(1.5); // Highest priority safe routing
+    setBeta(1.5);
     setActiveRouteId('route_safe');
 
     audioGuidance.speakSafetyCue(
@@ -737,7 +685,6 @@ export const App: React.FC = () => {
     );
   };
 
-  // Check if a real-time event is currently degrading the active route
   const handleNewCitizenReport = (report: CitizenReport) => {
     setCitizenReports(prev => [report, ...prev]);
     const injectedEvent = createDynamicEventFromReport(report);
@@ -745,12 +692,10 @@ export const App: React.FC = () => {
     audioGuidance.speakSafetyCue(`New citizen audit report registered: ${report.title}. Dynamic roadway penalty applied.`);
   };
 
-  // Check if a real-time event is currently degrading the active route
   const activeDegradingEvent = dynamicEvents.find(
     e => e.active && activeRoute.segments.some(seg => e.affectedEdgeIds.includes(seg.edgeId))
   );
 
-  // Check if active route intersects any live road closures or active WIP construction zones
   const activeRouteClosures = useMemo(() => {
     return detectClosureIntersections(activeRoute.coordinates, liveClosures);
   }, [activeRoute.coordinates, liveClosures]);
@@ -770,7 +715,8 @@ export const App: React.FC = () => {
           onOpenSos={() => setIsSosOpen(true)}
           onOpenCabShield={() => setIsCabShieldOpen(true)}
           onOpenShelters={handleOpenShelters}
-        onOpenFakeCall={() => setIsFakeCallOpen(true)}
+          onOpenFakeCall={() => setIsFakeCallOpen(true)}
+          onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
           onLockSafeHaven={handleLockSafeHaven}
           currentCoordinates={telemetry.currentPosition}
           userCoordinates={telemetry.currentPosition}
@@ -812,6 +758,8 @@ export const App: React.FC = () => {
         onOpenSos={() => setIsSosOpen(true)}
         onOpenCabShield={() => setIsCabShieldOpen(true)}
         onOpenShelters={handleOpenShelters}
+        onOpenFakeCall={() => setIsFakeCallOpen(true)}
+        onOpenKavachCockpit={() => setIsKavachModalOpen(true)}
         onLockSafeHaven={handleLockSafeHaven}
         currentCoordinates={activeUserCoordinates}
         userCoordinates={activeUserCoordinates}
@@ -822,7 +770,7 @@ export const App: React.FC = () => {
         onWeatherModeChange={(_, profile) => setWeatherProfile(profile)}
       />
 
-      {/* IDEA 3: Closed-Loop Civic Resolution Floating Toast (SDG 11) */}
+      {/* Closed-Loop Civic Resolution Floating Toast */}
       {civicToast && (
         <div style={{
           position: 'fixed',
@@ -908,19 +856,20 @@ export const App: React.FC = () => {
               <span>Tap to minimize to full map</span>
             </div>
           </div>
+
           {userRole === 'admin' && (
             <section className="sidebar-section">
               <ErrorBoundary fallbackTitle="Admin Dashboard Error">
                 <CivicAdminDashboard
                   onHighlightEdge={setSelectedEdgeId}
                   citizenReports={citizenReports}
-                  onUpdateCitizenReport={(reportId, newStatus) => {
+                  onUpdateCitizenReport={(reportId: string, newStatus: CitizenReport['status']) => {
                     const rep = citizenReports.find(r => r.id === reportId);
                     setCitizenReports(prev => prev.map(r => r.id === reportId ? { ...r, status: newStatus } : r));
 
                     if (newStatus === 'investigating') {
                       setCivicToast({
-                        title: '🚧 Municipal Dispatch Order Initiated (SDG 11)',
+                        title: '🚧 Municipal Dispatch Order Initiated',
                         detail: `PMC Work Order dispatched to ${rep?.landmarkName || 'reported location'}. Repair crew mobilized.`,
                         points: 4,
                         timestamp: Date.now()
@@ -928,7 +877,7 @@ export const App: React.FC = () => {
                       audioGuidance.speakSafetyCue('Municipal repair crew mobilized for citizen report.');
                     } else if (newStatus === 'resolved') {
                       setCivicToast({
-                        title: '🎉 Closed-Loop Civic Resolution (SDG 11)',
+                        title: '🎉 Closed-Loop Civic Resolution',
                         detail: `Municipal electrical team repaired lighting at ${rep?.landmarkName || 'reported dark spot'}. Arterial illumination restored (+10 pts Safety Confidence)!`,
                         points: 10,
                         timestamp: Date.now()
@@ -1099,6 +1048,7 @@ export const App: React.FC = () => {
                     currentLanguage={currentLanguage}
                   />
                 </ErrorBoundary>
+
                 <ErrorBoundary fallbackTitle="Safe Haven Error">
                   <QuickSafeHavenButton
                     currentCoordinates={activeUserCoordinates}
@@ -1139,7 +1089,7 @@ export const App: React.FC = () => {
               </section>
 
               {/* Section 4: Collapsible Micro-Segment Inspector */}
-              <section className="sidebar-section" style={{ padding: '8px 24px 16px' }}>
+              <section className="sidebar-section" style={{ padding: '8px 24px 12px' }}>
                 <button
                   type="button"
                   className="accordion-toggle-btn"
@@ -1169,6 +1119,39 @@ export const App: React.FC = () => {
                   </div>
                 )}
               </section>
+
+              {/* Section 5: AI Safety Explainability & SHAP Waterfall */}
+              <section className="sidebar-section" style={{ padding: '8px 24px 16px' }}>
+                <button
+                  type="button"
+                  className="accordion-toggle-btn"
+                  onClick={() => setIsExplainOpen(!isExplainOpen)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Cpu size={14} color="var(--haven-blue)" />
+                    <span style={{ fontWeight: 600, fontSize: '12px' }}>Explainability & Feature SHAP</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="brand-badge" style={{ fontSize: '10px' }}>ML Radar</span>
+                    <ChevronDown size={14} style={{ transform: isExplainOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)' }} />
+                  </div>
+                </button>
+
+                {isExplainOpen && (
+                  <div className="accordion-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <ErrorBoundary fallbackTitle="Radar Error">
+                      <ExplainabilityRadar
+                        activeRoute={activeRoute}
+                      />
+                    </ErrorBoundary>
+                    <ErrorBoundary fallbackTitle="Tree SHAP Error">
+                      <TreeShapWaterfall
+                        activeRoute={activeRoute}
+                      />
+                    </ErrorBoundary>
+                  </div>
+                )}
+              </section>
             </>
           )}
         </aside>
@@ -1185,7 +1168,7 @@ export const App: React.FC = () => {
             <span>{isSidebarCollapsed ? "Show Routes" : "Full Map"}</span>
           </button>
 
-          {/* Mobile Bottom Peek Card: Thumb-friendly tap to re-open safe route panel */}
+          {/* Mobile Bottom Peek Card */}
           {isSidebarCollapsed && !isLiveGpsActive && (
             <div
               className="mobile-bottom-peek-card"
@@ -1377,6 +1360,27 @@ export const App: React.FC = () => {
         isOpen={isShareLocationModalOpen}
         onClose={() => setIsShareLocationModalOpen(false)}
       />
+
+      {/* Surakshit Kavach BLE Safety Charm & Mesh Hardware Modal */}
+      <SurakshitKavachCockpit
+        isOpen={isKavachModalOpen}
+        onClose={() => setIsKavachModalOpen(false)}
+        onTriggerSos={() => setIsSosOpen(true)}
+      />
+
+      {/* Active Corridor Safety Check-in Anomaly Modal */}
+      {anomalyState.isOpen && (
+        <SafetyCheckModal
+          anomalyState={anomalyState}
+          telemetry={telemetry}
+          activeRoute={activeRoute}
+          onDismiss={() => setAnomalyState(prev => ({ ...prev, isOpen: false }))}
+          onSosDispatched={() => {
+            setAnomalyState(prev => ({ ...prev, sosDispatched: true }));
+            setIsSosOpen(true);
+          }}
+        />
+      )}
 
       {/* Floating 1-Tap Emergency SOS Trigger Button for Commuters */}
       {userRole === 'commuter' && !isTrackingMode && (

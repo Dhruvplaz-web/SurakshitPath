@@ -7,13 +7,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    fs: {
-      strict: false,
-      allow: ['..', 'E:/Software/acm sdg', 'E:/Software/acm sdg-v1']
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      }
     }
-  },
-  resolve: {
-    preserveSymlinks: true
   },
   build: {
     // Disable production source maps to protect intellectual property and reduce bundle overhead
@@ -28,8 +27,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
           'vendor-geo': ['leaflet', '@turf/turf'],
-          'vendor-ui': ['lucide-react'],
-          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore']
+          'vendor-ui': ['lucide-react']
         }
       }
     }
