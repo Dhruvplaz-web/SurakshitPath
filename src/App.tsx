@@ -1297,6 +1297,7 @@ export const App: React.FC = () => {
                 }
               }}
               onLockSafeHaven={handleLockSafeHaven}
+              onSelectRoute={setActiveRouteId}
               currentLanguage={currentLanguage}
             />
           </ErrorBoundary>

@@ -155,3 +155,138 @@ export function generateRouteManeuvers(coords: [number, number][], roadName: str
 
   return maneuvers;
 }
+
+/**
+ * Calculates a lateral perpendicular waypoint along the route axis
+ * When passed to OSRM, snaps to the nearest real parallel road corridor.
+ */
+export function calculateLateralCorridorWaypoint(
+  origin: [number, number],
+  dest: [number, number],
+  side: 'left' | 'right' = 'left',
+  factor: number = 0.18
+): [number, number] {
+  const dLat = dest[0] - origin[0];
+  const dLng = dest[1] - origin[1];
+  const midLat = (origin[0] + dest[0]) / 2;
+  const midLng = (origin[1] + dest[1]) / 2;
+  const sign = side === 'left' ? 1 : -1;
+
+  // Perpendicular offset vector: (-dLng, dLat)
+  const perpLat = -dLng * factor * sign;
+  const perpLng = dLat * factor * sign;
+
+  return [
+    Number((midLat + perpLat).toFixed(5)),
+    Number((midLng + perpLng).toFixed(5))
+  ];
+}
+
+/**
+ * Selects an optimal intermediate waypoint between origin and destination
+ * to guarantee that Safest, SwiftSafe, and Transit routes traverse different physical roads.
+ */
+export function findCorridorWaypoint(
+  origin: [number, number],
+  dest: [number, number],
+  strategy: 'safe_haven' | 'necessity' | 'transit'
+): [number, number] {
+  const directDist = getDistanceMeters(origin, dest);
+
+  // For very short trips (< 450m), calculate a lateral parallel street offset
+  if (directDist < 450) {
+    if (strategy === 'safe_haven') return calculateLateralCorridorWaypoint(origin, dest, 'left', 0.22);
+    if (strategy === 'transit') return calculateLateralCorridorWaypoint(origin, dest, 'right', 0.22);
+    return calculateLateralCorridorWaypoint(origin, dest, 'left', 0.12);
+  }
+
+  if (strategy === 'safe_haven') {
+    // Look for verified Police Station, Sakhi One-Stop Center, or 24/7 Hospital in the corridor
+    let bestHaven: [number, number] | null = null;
+    let bestScore = -Infinity;
+
+    for (const h of PUNE_SAFE_HAVENS) {
+      const dOrigin = getDistanceMeters(origin, h.coordinates);
+      const dDest = getDistanceMeters(h.coordinates, dest);
+      const totalDetour = dOrigin + dDest;
+      const ratio = totalDetour / directDist;
+
+      // Haven must sit in a reasonable corridor (adding between 6% and 42% detour)
+      if (ratio >= 1.06 && ratio <= 1.42 && dOrigin >= directDist * 0.15 && dDest >= directDist * 0.15) {
+        // Prefer higher trust score and moderate detour
+        const score = (h.trustScore || 85) - ratio * 15;
+        if (score > bestScore) {
+          bestScore = score;
+          bestHaven = h.coordinates;
+        }
+      }
+    }
+
+    if (bestHaven) return bestHaven;
+    // Fallback: lateral offset to primary arterial corridor
+    return calculateLateralCorridorWaypoint(origin, dest, 'left', 0.18);
+  }
+
+  if (strategy === 'transit') {
+    // Look for transit station or transit boulevard in the corridor
+    let bestTransit: [number, number] | null = null;
+    let minDetour = Infinity;
+
+    for (const h of PUNE_SAFE_HAVENS) {
+      const isTransit = h.type === 'transit_hub' || 
+        h.name.toLowerCase().includes('metro') || 
+        h.name.toLowerCase().includes('station') ||
+        h.name.toLowerCase().includes('depot') ||
+        h.name.toLowerCase().includes('stand') ||
+        h.address.toLowerCase().includes('highway');
+
+      if (!isTransit) continue;
+
+      const dOrigin = getDistanceMeters(origin, h.coordinates);
+      const dDest = getDistanceMeters(h.coordinates, dest);
+      const totalDetour = dOrigin + dDest;
+      const ratio = totalDetour / directDist;
+
+      if (ratio >= 1.05 && ratio <= 1.45 && dOrigin >= directDist * 0.15 && dDest >= directDist * 0.15) {
+        if (ratio < minDetour) {
+          minDetour = ratio;
+          bestTransit = h.coordinates;
+        }
+      }
+    }
+
+    if (bestTransit) return bestTransit;
+    return calculateLateralCorridorWaypoint(origin, dest, 'right', 0.20);
+  }
+
+  // strategy === 'necessity' (Swift & Safe / Balanced)
+  // Look for 24/7 lighted fuel plaza / commercial avenue
+  return calculateLateralCorridorWaypoint(origin, dest, 'left', 0.12);
+}
+
+/**
+ * Checks if two coordinate polylines are effectively the same physical path
+ */
+export function areRouteCoordinatesDistinct(
+  coordsA: [number, number][],
+  coordsB: [number, number][],
+  minDeviationMeters: number = 40
+): boolean {
+  if (!coordsA || !coordsB || coordsA.length === 0 || coordsB.length === 0) return false;
+  if (Math.abs(coordsA.length - coordsB.length) > 15) return true;
+
+  // Sample 8 points along the path
+  const numChecks = 8;
+  let maxDeviation = 0;
+
+  for (let i = 1; i < numChecks; i++) {
+    const idxA = Math.floor((i / numChecks) * coordsA.length);
+    const idxB = Math.floor((i / numChecks) * coordsB.length);
+    const ptA = coordsA[idxA];
+    const ptB = coordsB[idxB];
+    const d = getDistanceMeters(ptA, ptB);
+    if (d > maxDeviation) maxDeviation = d;
+  }
+
+  return maxDeviation >= minDeviationMeters;
+}

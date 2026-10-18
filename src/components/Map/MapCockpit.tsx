@@ -34,6 +34,7 @@ interface Props {
   isLiveNavigating?: boolean;
   onToggleLiveNavigation?: (nav: boolean) => void;
   onLockSafeHaven?: (haven: SafeHaven) => void;
+  onSelectRoute?: (id: string) => void;
   currentLanguage?: AppLanguage;
 }
 
@@ -59,6 +60,7 @@ export const MapCockpit: React.FC<Props> = ({
   isLiveNavigating = false,
   onToggleLiveNavigation,
   onLockSafeHaven,
+  onSelectRoute,
   currentLanguage = 'en'
 }) => {
   const t = getTranslation(currentLanguage);
@@ -449,6 +451,9 @@ export const MapCockpit: React.FC<Props> = ({
         lineCap: 'round',
         lineJoin: 'round'
       });
+      if (onSelectRoute) {
+        altCasing.on('click', () => onSelectRoute(alt.id));
+      }
       routesGroup.addLayer(altCasing);
 
       const altPolyline = L.polyline(alt.coordinates, {
@@ -459,11 +464,15 @@ export const MapCockpit: React.FC<Props> = ({
         lineCap: 'round',
         lineJoin: 'round'
       });
+      if (onSelectRoute) {
+        altPolyline.on('click', () => onSelectRoute(alt.id));
+      }
       altPolyline.bindTooltip(`
         <div style="font-family:'Inter',sans-serif; font-size:12px;">
           <strong>${alt.name}</strong><br/>
           ${isUnrec ? '<strong style="color:#ef4444;">⚠️ Not Recommended at Night</strong><br/>' : '<span style="color:#34d399;">⭐ Transit Alternative</span><br/>'}
-          <span style="font-size:11px; opacity:0.8;">${alt.durationMinutes}m · Safety ${alt.safetyScore}/100</span>
+          <span style="font-size:11px; opacity:0.8;">${alt.durationMinutes}m · Safety ${alt.safetyScore}/100</span><br/>
+          <span style="font-size:10px; color:#38bdf8; font-weight:700;">👆 Click to switch to this route</span>
         </div>
       `, { sticky: true });
       routesGroup.addLayer(altPolyline);
